@@ -1,7 +1,6 @@
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import time
-from typing import Optional, Union
 
 import humanize
 
@@ -10,7 +9,7 @@ from freqtrade.constants import DATETIME_PRINT_FORMAT
 
 def dt_now() -> datetime:
     """Return the current datetime in UTC."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def dt_utc(
@@ -23,10 +22,10 @@ def dt_utc(
     microsecond: int = 0,
 ) -> datetime:
     """Return a datetime in UTC."""
-    return datetime(year, month, day, hour, minute, second, microsecond, tzinfo=timezone.utc)
+    return datetime(year, month, day, hour, minute, second, microsecond, tzinfo=UTC)
 
 
-def dt_ts(dt: Optional[datetime] = None) -> int:
+def dt_ts(dt: datetime | None = None) -> int:
     """
     Return dt in ms as a timestamp in UTC.
     If dt is None, return the current datetime in UTC.
@@ -36,7 +35,7 @@ def dt_ts(dt: Optional[datetime] = None) -> int:
     return int(time() * 1000)
 
 
-def dt_ts_def(dt: Optional[datetime], default: int = 0) -> int:
+def dt_ts_def(dt: datetime | None, default: int = 0) -> int:
     """
     Return dt in ms as a timestamp in UTC.
     If dt is None, return the given default.
@@ -46,7 +45,7 @@ def dt_ts_def(dt: Optional[datetime], default: int = 0) -> int:
     return default
 
 
-def dt_ts_none(dt: Optional[datetime]) -> Optional[int]:
+def dt_ts_none(dt: datetime | None) -> int | None:
     """
     Return dt in ms as a timestamp in UTC.
     If dt is None, return the given default.
@@ -69,7 +68,7 @@ def dt_from_ts(timestamp: float) -> datetime:
     if timestamp > 1e10:
         # Timezone in ms - convert to seconds
         timestamp /= 1000
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    return datetime.fromtimestamp(timestamp, tz=UTC)
 
 
 def shorten_date(_date: str) -> str:
@@ -91,7 +90,7 @@ def dt_humanize_delta(dt: datetime):
     return humanize.naturaltime(dt)
 
 
-def format_date(date: Optional[datetime]) -> str:
+def format_date(date: datetime | None) -> str:
     """
     Return a formatted date string.
     Returns an empty string if date is None.
@@ -102,9 +101,18 @@ def format_date(date: Optional[datetime]) -> str:
     return ""
 
 
-def format_ms_time(date: Union[int, float]) -> str:
+def format_ms_time(date: int | float) -> str:
     """
     convert MS date to readable format.
     : epoch-string in ms
     """
     return dt_from_ts(date).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def format_ms_time_det(date: int | float) -> str:
+    """
+    convert MS date to readable format - detailed.
+    : epoch-string in ms
+    """
+    # return dt_from_ts(date).isoformat(timespec="milliseconds")
+    return dt_from_ts(date).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]

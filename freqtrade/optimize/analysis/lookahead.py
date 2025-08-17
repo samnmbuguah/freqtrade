@@ -3,7 +3,7 @@ import shutil
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from pandas import DataFrame
 
@@ -25,16 +25,16 @@ class Analysis:
         self.total_signals = 0
         self.false_entry_signals = 0
         self.false_exit_signals = 0
-        self.false_indicators: List[str] = []
+        self.false_indicators: list[str] = []
         self.has_bias = False
 
 
 class LookaheadAnalysis(BaseAnalysis):
-    def __init__(self, config: Dict[str, Any], strategy_obj: Dict):
+    def __init__(self, config: dict[str, Any], strategy_obj: dict):
         super().__init__(config, strategy_obj)
 
-        self.entry_varHolders: List[VarHolder] = []
-        self.exit_varHolders: List[VarHolder] = []
+        self.entry_varHolders: list[VarHolder] = []
+        self.exit_varHolders: list[VarHolder] = []
 
         self.current_analysis = Analysis()
         self.minimum_trade_amount = config["minimum_trade_amount"]
@@ -99,7 +99,7 @@ class LookaheadAnalysis(BaseAnalysis):
                                 f"{str(self_value)} != {str(other_value)}"
                             )
 
-    def prepare_data(self, varholder: VarHolder, pairs_to_load: List[DataFrame]):
+    def prepare_data(self, varholder: VarHolder, pairs_to_load: list[DataFrame]):
         if "freqai" in self.local_config and "identifier" in self.local_config["freqai"]:
             # purge previous data if the freqai model is defined
             # (to be sure nothing is carried over from older backtests)
@@ -125,11 +125,11 @@ class LookaheadAnalysis(BaseAnalysis):
 
         backtesting = Backtesting(prepare_data_config, self.exchange)
         self.exchange = backtesting.exchange
+        self.local_config["candle_type_def"] = prepare_data_config["candle_type_def"]
         self._fee = backtesting.fee
         backtesting._set_strategy(backtesting.strategylist[0])
 
         varholder.data, varholder.timerange = backtesting.load_bt_data()
-        backtesting.load_bt_data_detail()
         varholder.timeframe = backtesting.timeframe
 
         varholder.indicators = backtesting.strategy.advise_all_indicators(varholder.data)
@@ -208,8 +208,7 @@ class LookaheadAnalysis(BaseAnalysis):
         found_signals: int = self.full_varHolder.result["results"].shape[0] + 1
         if found_signals >= self.targeted_trade_amount:
             logger.info(
-                f"Found {found_signals} trades, "
-                f"calculating {self.targeted_trade_amount} trades."
+                f"Found {found_signals} trades, calculating {self.targeted_trade_amount} trades."
             )
         elif self.targeted_trade_amount >= found_signals >= self.minimum_trade_amount:
             logger.info(f"Only found {found_signals} trades. Calculating all available trades.")
@@ -237,7 +236,7 @@ class LookaheadAnalysis(BaseAnalysis):
                 return None
             if "force_exit" in result_row["exit_reason"]:
                 logger.info(
-                    "found force-exit in pair: {result_row['pair']}, "
+                    f"found force-exit in pair: {result_row['pair']}, "
                     f"timerange:{result_row['open_date']}-{result_row['close_date']}, "
                     f"idx: {idx}, skipping this one to avoid a false-positive."
                 )

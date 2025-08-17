@@ -75,7 +75,26 @@ Webhook terminology changed from "sell" to "exit", and from "buy" to "entry", re
 * `webhooksellfill`, `webhookexitfill` -> `exit_fill`
 * `webhooksellcancel`, `webhookexitcancel` -> `exit_cancel`
 
-
 ## Removal of `populate_any_indicators`
 
 version 2023.3 saw the removal of `populate_any_indicators` in favor of split methods for feature engineering and targets. Please read the [migration document](strategy_migration.md#freqai-strategy) for full details.
+
+## Removal of `protections` from configuration
+
+Setting protections from the configuration via `"protections": [],` has been removed in 2024.10, after having raised deprecation warnings for over 3 years.
+
+## hdf5 data storage
+
+Using hdf5 as data storage has been deprecated in 2024.12 and was removed in 2025.1. We recommend switching to the feather data format.
+
+Please use the [`convert-data` subcommand](data-download.md#sub-command-convert-data) to convert your existing data to one of the supported formats before updating.
+
+## Configuring advanced logging via config
+
+Configuring syslog and journald via `--logfile systemd` and `--logfile journald` respectively has been deprecated in 2025.3.
+Please use configuration based [log setup](advanced-setup.md#advanced-logging) instead.
+
+## Removal of the edge module
+
+The edge module has been deprecated in 2023.9 and removed in 2025.6.
+All functionalities of edge have been removed, and having edge configured will result in an error.

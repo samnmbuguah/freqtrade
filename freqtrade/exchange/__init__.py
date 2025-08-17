@@ -1,16 +1,16 @@
 # flake8: noqa: F401
 # isort: off
-from freqtrade.exchange.common import remove_exchange_credentials, MAP_EXCHANGE_CHILDCLASS
+from freqtrade.exchange.common import MAP_EXCHANGE_CHILDCLASS
 from freqtrade.exchange.exchange import Exchange
 
 # isort: on
 from freqtrade.exchange.binance import Binance
 from freqtrade.exchange.bingx import Bingx
+from freqtrade.exchange.bitget import Bitget
 from freqtrade.exchange.bitmart import Bitmart
 from freqtrade.exchange.bitpanda import Bitpanda
 from freqtrade.exchange.bitvavo import Bitvavo
 from freqtrade.exchange.bybit import Bybit
-from freqtrade.exchange.coinbasepro import Coinbasepro
 from freqtrade.exchange.cryptocom import Cryptocom
 from freqtrade.exchange.exchange_utils import (
     ROUND_DOWN,
@@ -43,4 +43,7 @@ from freqtrade.exchange.hyperliquid import Hyperliquid
 from freqtrade.exchange.idex import Idex
 from freqtrade.exchange.kraken import Kraken
 from freqtrade.exchange.kucoin import Kucoin
-from freqtrade.exchange.okx import Okx
+from freqtrade.exchange.lbank import Lbank
+from freqtrade.exchange.luno import Luno
+from freqtrade.exchange.modetrade import Modetrade
+from freqtrade.exchange.okx import MyOkx, Okx

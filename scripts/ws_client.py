@@ -234,7 +234,7 @@ async def create_client(
 
                         await protocol.on_message(ws, name, message)
 
-                    except (asyncio.TimeoutError, websockets.exceptions.WebSocketException):
+                    except (TimeoutError, websockets.exceptions.WebSocketException):
                         # Try pinging
                         try:
                             pong = await ws.ping()
@@ -244,7 +244,7 @@ async def create_client(
 
                             continue
 
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             logger.error(f"Ping timed out, retrying in {sleep_time}s")
                             await asyncio.sleep(sleep_time)
 
@@ -253,8 +253,7 @@ async def create_client(
         except (
             socket.gaierror,
             ConnectionRefusedError,
-            websockets.exceptions.InvalidStatusCode,
-            websockets.exceptions.InvalidMessage,
+            websockets.exceptions.InvalidHandshake,
         ) as e:
             logger.error(f"Connection Refused - {e} retrying in {sleep_time}s")
             await asyncio.sleep(sleep_time)

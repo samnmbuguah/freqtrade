@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -90,20 +90,13 @@ def test_historic_trades(mocker, default_conf, trades_history_df):
     assert isinstance(data, DataFrame)
     assert len(data) == len(trades_history_df)
 
-    # Random other runmode
-    default_conf["runmode"] = RunMode.UTIL_EXCHANGE
-    dp = DataProvider(default_conf, None)
-    data = dp.trades("UNITTEST/BTC", "5m")
-    assert isinstance(data, DataFrame)
-    assert len(data) == 0
-
 
 def test_historic_ohlcv_dataformat(mocker, default_conf, ohlcv_history):
-    hdf5loadmock = MagicMock(return_value=ohlcv_history)
+    parquetloadmock = MagicMock(return_value=ohlcv_history)
     featherloadmock = MagicMock(return_value=ohlcv_history)
     mocker.patch(
-        "freqtrade.data.history.datahandlers.hdf5datahandler.HDF5DataHandler._ohlcv_load",
-        hdf5loadmock,
+        "freqtrade.data.history.datahandlers.parquetdatahandler.ParquetDataHandler._ohlcv_load",
+        parquetloadmock,
     )
     mocker.patch(
         "freqtrade.data.history.datahandlers.featherdatahandler.FeatherDataHandler._ohlcv_load",
@@ -115,17 +108,17 @@ def test_historic_ohlcv_dataformat(mocker, default_conf, ohlcv_history):
     dp = DataProvider(default_conf, exchange)
     data = dp.historic_ohlcv("UNITTEST/BTC", "5m")
     assert isinstance(data, DataFrame)
-    hdf5loadmock.assert_not_called()
+    parquetloadmock.assert_not_called()
     featherloadmock.assert_called_once()
 
-    # Switching to dataformat hdf5
-    hdf5loadmock.reset_mock()
+    # Switching to dataformat parquet
+    parquetloadmock.reset_mock()
     featherloadmock.reset_mock()
-    default_conf["dataformat_ohlcv"] = "hdf5"
+    default_conf["dataformat_ohlcv"] = "parquet"
     dp = DataProvider(default_conf, exchange)
     data = dp.historic_ohlcv("UNITTEST/BTC", "5m")
     assert isinstance(data, DataFrame)
-    hdf5loadmock.assert_called_once()
+    parquetloadmock.assert_called_once()
     featherloadmock.assert_not_called()
 
 
@@ -229,8 +222,8 @@ def test_get_producer_df(default_conf):
     timeframe = default_conf["timeframe"]
     candle_type = CandleType.SPOT
 
-    empty_la = datetime.fromtimestamp(0, tz=timezone.utc)
-    now = datetime.now(timezone.utc)
+    empty_la = datetime.fromtimestamp(0, tz=UTC)
+    now = datetime.now(UTC)
 
     # no data has been added, any request should return an empty dataframe
     dataframe, la = dataprovider.get_producer_df(pair, timeframe, candle_type)
@@ -411,24 +404,24 @@ def test_get_analyzed_dataframe(mocker, default_conf, ohlcv_history):
     dataframe, time = dp.get_analyzed_dataframe("NOTHING/BTC", timeframe)
     assert dataframe.empty
     assert isinstance(time, datetime)
-    assert time == datetime(1970, 1, 1, tzinfo=timezone.utc)
+    assert time == datetime(1970, 1, 1, tzinfo=UTC)
 
     # Test backtest mode
     default_conf["runmode"] = RunMode.BACKTEST
-    dp._set_dataframe_max_index(1)
+    dp._set_dataframe_max_index("XRP/BTC", 1)
     dataframe, time = dp.get_analyzed_dataframe("XRP/BTC", timeframe)
 
     assert len(dataframe) == 1
 
-    dp._set_dataframe_max_index(2)
+    dp._set_dataframe_max_index("XRP/BTC", 2)
     dataframe, time = dp.get_analyzed_dataframe("XRP/BTC", timeframe)
     assert len(dataframe) == 2
 
-    dp._set_dataframe_max_index(3)
+    dp._set_dataframe_max_index("XRP/BTC", 3)
     dataframe, time = dp.get_analyzed_dataframe("XRP/BTC", timeframe)
     assert len(dataframe) == 3
 
-    dp._set_dataframe_max_index(500)
+    dp._set_dataframe_max_index("XRP/BTC", 500)
     dataframe, time = dp.get_analyzed_dataframe("XRP/BTC", timeframe)
     assert len(dataframe) == len(ohlcv_history)
 
@@ -485,7 +478,7 @@ def test_dp__add_external_df(default_conf_usdt):
     default_conf_usdt["timeframe"] = timeframe
     dp = DataProvider(default_conf_usdt, None)
     df = generate_test_data(timeframe, 24, "2022-01-01 00:00:00+00:00")
-    last_analyzed = datetime.now(timezone.utc)
+    last_analyzed = datetime.now(UTC)
 
     res = dp._add_external_df("ETH/USDT", df, last_analyzed, timeframe, CandleType.SPOT)
     assert res[0] is False

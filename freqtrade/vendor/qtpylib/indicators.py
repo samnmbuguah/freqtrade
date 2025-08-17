@@ -32,7 +32,7 @@ warnings.simplefilter(action="ignore", category=RuntimeWarning)
 
 def numpy_rolling_window(data, window):
     shape = data.shape[:-1] + (data.shape[-1] - window + 1, window)
-    strides = data.strides + (data.strides[-1],)
+    strides = (*data.strides, data.strides[-1])
     return np.lib.stride_tricks.as_strided(data, shape=shape, strides=strides)
 
 
@@ -227,7 +227,7 @@ def crossed(series1, series2, direction=None):
     if isinstance(series1, np.ndarray):
         series1 = pd.Series(series1)
 
-    if isinstance(series2, (float, int, np.ndarray, np.integer, np.floating)):
+    if isinstance(series2, float | int | np.ndarray | np.integer | np.floating):
         series2 = pd.Series(index=series1.index, data=series2)
 
     if direction is None or direction == "above":

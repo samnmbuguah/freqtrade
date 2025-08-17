@@ -1,7 +1,6 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import Optional
 
 from freqtrade.configuration.detect_environment import running_in_docker
 from freqtrade.constants import (
@@ -18,7 +17,7 @@ from freqtrade.exceptions import OperationalException
 logger = logging.getLogger(__name__)
 
 
-def create_datadir(config: Config, datadir: Optional[str] = None) -> Path:
+def create_datadir(config: Config, datadir: str | None = None) -> Path:
     folder = Path(datadir) if datadir else Path(f"{config['user_data_dir']}/data")
     if not datadir:
         # set datadir
@@ -38,7 +37,7 @@ def chown_user_directory(directory: Path) -> None:
     """
     if running_in_docker():
         try:
-            import subprocess  # noqa: S404
+            import subprocess  # noqa: S404, RUF100
 
             subprocess.check_output(["sudo", "chown", "-R", "ftuser:", str(directory.resolve())])
         except Exception:
@@ -82,6 +81,11 @@ def create_userdata_dir(directory: str, create_dir: bool = False) -> Path:
     for f in sub_dirs:
         subfolder = folder / f
         if not subfolder.is_dir():
+            if subfolder.exists() or subfolder.is_symlink():
+                raise OperationalException(
+                    f"File `{subfolder}` exists already and is not a directory. "
+                    "Freqtrade requires this to be a directory."
+                )
             subfolder.mkdir(parents=False)
     return folder
 

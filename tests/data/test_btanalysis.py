@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
+from zipfile import ZipFile
 
 import pytest
 from pandas import DataFrame, DateOffset, Timestamp, to_datetime
@@ -15,6 +16,7 @@ from freqtrade.data.btanalysis import (
     get_latest_hyperopt_file,
     load_backtest_data,
     load_backtest_metadata,
+    load_file_from_zip,
     load_trades,
     load_trades_from_db,
 )
@@ -28,6 +30,7 @@ from freqtrade.data.metrics import (
     calculate_max_drawdown,
     calculate_sharpe,
     calculate_sortino,
+    calculate_sqn,
     calculate_underwater,
     combine_dataframes_with_mean,
     combined_dataframes_with_rel_mean,
@@ -53,7 +56,7 @@ def test_get_latest_backtest_filename(testdatadir, mocker):
     res = get_latest_backtest_filename(str(testdir_bt))
     assert res == "backtest-result.json"
 
-    mocker.patch("freqtrade.data.btanalysis.json_load", return_value={})
+    mocker.patch("freqtrade.data.btanalysis.bt_fileutils.json_load", return_value={})
 
     with pytest.raises(ValueError, match=r"Invalid '.last_result.json' format."):
         get_latest_backtest_filename(testdir_bt)
@@ -81,8 +84,8 @@ def test_load_backtest_metadata(mocker, testdatadir):
     res = load_backtest_metadata(testdatadir / "nonexistent.file.json")
     assert res == {}
 
-    mocker.patch("freqtrade.data.btanalysis.get_backtest_metadata_filename")
-    mocker.patch("freqtrade.data.btanalysis.json_load", side_effect=Exception())
+    mocker.patch("freqtrade.data.btanalysis.bt_fileutils.get_backtest_metadata_filename")
+    mocker.patch("freqtrade.data.btanalysis.bt_fileutils.json_load", side_effect=Exception())
     with pytest.raises(
         OperationalException, match=r"Unexpected error.*loading backtest metadata\."
     ):
@@ -91,7 +94,7 @@ def test_load_backtest_metadata(mocker, testdatadir):
 
 def test_load_backtest_data_old_format(testdatadir, mocker):
     filename = testdatadir / "backtest-result_test222.json"
-    mocker.patch("freqtrade.data.btanalysis.load_backtest_stats", return_value=[])
+    mocker.patch("freqtrade.data.btanalysis.bt_fileutils.load_backtest_stats", return_value=[])
 
     with pytest.raises(
         OperationalException,
@@ -146,7 +149,7 @@ def test_load_backtest_data_multi(testdatadir):
 def test_load_trades_from_db(default_conf, fee, is_short, mocker):
     create_mock_trades(fee, is_short)
     # remove init so it does not init again
-    init_mock = mocker.patch("freqtrade.data.btanalysis.init_db", MagicMock())
+    init_mock = mocker.patch("freqtrade.data.btanalysis.bt_fileutils.init_db", MagicMock())
 
     trades = load_trades_from_db(db_url=default_conf["db_url"])
     assert init_mock.call_count == 1
@@ -179,19 +182,19 @@ def test_extract_trades_of_period(testdatadir):
             "profit_abs": [0.0, 1, -2, -5],
             "open_date": to_datetime(
                 [
-                    datetime(2017, 11, 13, 15, 40, 0, tzinfo=timezone.utc),
-                    datetime(2017, 11, 14, 9, 41, 0, tzinfo=timezone.utc),
-                    datetime(2017, 11, 14, 14, 20, 0, tzinfo=timezone.utc),
-                    datetime(2017, 11, 15, 3, 40, 0, tzinfo=timezone.utc),
+                    datetime(2017, 11, 13, 15, 40, 0, tzinfo=UTC),
+                    datetime(2017, 11, 14, 9, 41, 0, tzinfo=UTC),
+                    datetime(2017, 11, 14, 14, 20, 0, tzinfo=UTC),
+                    datetime(2017, 11, 15, 3, 40, 0, tzinfo=UTC),
                 ],
                 utc=True,
             ),
             "close_date": to_datetime(
                 [
-                    datetime(2017, 11, 13, 16, 40, 0, tzinfo=timezone.utc),
-                    datetime(2017, 11, 14, 10, 41, 0, tzinfo=timezone.utc),
-                    datetime(2017, 11, 14, 15, 25, 0, tzinfo=timezone.utc),
-                    datetime(2017, 11, 15, 3, 55, 0, tzinfo=timezone.utc),
+                    datetime(2017, 11, 13, 16, 40, 0, tzinfo=UTC),
+                    datetime(2017, 11, 14, 10, 41, 0, tzinfo=UTC),
+                    datetime(2017, 11, 14, 15, 25, 0, tzinfo=UTC),
+                    datetime(2017, 11, 15, 3, 55, 0, tzinfo=UTC),
                 ],
                 utc=True,
             ),
@@ -200,10 +203,10 @@ def test_extract_trades_of_period(testdatadir):
     trades1 = extract_trades_of_period(data, trades)
     # First and last trade are dropped as they are out of range
     assert len(trades1) == 2
-    assert trades1.iloc[0].open_date == datetime(2017, 11, 14, 9, 41, 0, tzinfo=timezone.utc)
-    assert trades1.iloc[0].close_date == datetime(2017, 11, 14, 10, 41, 0, tzinfo=timezone.utc)
-    assert trades1.iloc[-1].open_date == datetime(2017, 11, 14, 14, 20, 0, tzinfo=timezone.utc)
-    assert trades1.iloc[-1].close_date == datetime(2017, 11, 14, 15, 25, 0, tzinfo=timezone.utc)
+    assert trades1.iloc[0].open_date == datetime(2017, 11, 14, 9, 41, 0, tzinfo=UTC)
+    assert trades1.iloc[0].close_date == datetime(2017, 11, 14, 10, 41, 0, tzinfo=UTC)
+    assert trades1.iloc[-1].open_date == datetime(2017, 11, 14, 14, 20, 0, tzinfo=UTC)
+    assert trades1.iloc[-1].close_date == datetime(2017, 11, 14, 15, 25, 0, tzinfo=UTC)
 
 
 def test_analyze_trade_parallelism(testdatadir):
@@ -218,8 +221,10 @@ def test_analyze_trade_parallelism(testdatadir):
 
 
 def test_load_trades(default_conf, mocker):
-    db_mock = mocker.patch("freqtrade.data.btanalysis.load_trades_from_db", MagicMock())
-    bt_mock = mocker.patch("freqtrade.data.btanalysis.load_backtest_data", MagicMock())
+    db_mock = mocker.patch(
+        "freqtrade.data.btanalysis.bt_fileutils.load_trades_from_db", MagicMock()
+    )
+    bt_mock = mocker.patch("freqtrade.data.btanalysis.bt_fileutils.load_backtest_data", MagicMock())
 
     load_trades(
         "DB",
@@ -265,6 +270,14 @@ def test_calculate_market_change(testdatadir):
     assert isinstance(result, float)
     assert pytest.approx(result) == 0.01100002
 
+    result = calculate_market_change(data, min_date=dt_utc(2018, 1, 20))
+    assert isinstance(result, float)
+    assert pytest.approx(result) == 0.0375149
+
+    # Move min-date after the last date
+    result = calculate_market_change(data, min_date=dt_utc(2018, 2, 20))
+    assert pytest.approx(result) == 0.0
+
 
 def test_combine_dataframes_with_mean(testdatadir):
     pairs = ["ETH/BTC", "ADA/BTC"]
@@ -280,7 +293,7 @@ def test_combined_dataframes_with_rel_mean(testdatadir):
     pairs = ["ETH/BTC", "ADA/BTC"]
     data = load_data(datadir=testdatadir, pairs=pairs, timeframe="5m")
     df = combined_dataframes_with_rel_mean(
-        data, datetime(2018, 1, 12, tzinfo=timezone.utc), datetime(2018, 1, 28, tzinfo=timezone.utc)
+        data, datetime(2018, 1, 12, tzinfo=UTC), datetime(2018, 1, 28, tzinfo=UTC)
     )
     assert isinstance(df, DataFrame)
     assert "ETH/BTC" not in df.columns
@@ -455,6 +468,42 @@ def test_calculate_calmar(testdatadir):
     assert pytest.approx(calmar) == 559.040508
 
 
+def test_calculate_sqn(testdatadir):
+    filename = testdatadir / "backtest_results/backtest-result.json"
+    bt_data = load_backtest_data(filename)
+
+    sqn = calculate_sqn(DataFrame(), 0)
+    assert sqn == 0.0
+
+    sqn = calculate_sqn(
+        bt_data,
+        0.01,
+    )
+    assert isinstance(sqn, float)
+    assert pytest.approx(sqn) == 3.2991
+
+
+@pytest.mark.parametrize(
+    "profits,starting_balance,expected_sqn,description",
+    [
+        ([1.0, -0.5, 2.0, -1.0, 0.5, 1.5, -0.5, 1.0], 100, 1.3229, "Mixed profits/losses"),
+        ([], 100, 0.0, "Empty dataframe"),
+        ([1.0, 0.5, 2.0, 1.5, 0.8], 100, 4.3657, "All winning trades"),
+        ([-1.0, -0.5, -2.0, -1.5, -0.8], 100, -4.3657, "All losing trades"),
+        ([1.0], 100, -100, "Single trade"),
+    ],
+)
+def test_calculate_sqn_cases(profits, starting_balance, expected_sqn, description):
+    """
+    Test SQN calculation with various scenarios:
+    """
+    trades = DataFrame({"profit_abs": profits})
+    sqn = calculate_sqn(trades, starting_balance=starting_balance)
+
+    assert isinstance(sqn, float)
+    assert pytest.approx(sqn, rel=1e-4) == expected_sqn
+
+
 @pytest.mark.parametrize(
     "start,end,days, expected",
     [
@@ -503,7 +552,7 @@ def test_calculate_max_drawdown2():
     ]
 
     dates = [dt_utc(2020, 1, 1) + timedelta(days=i) for i in range(len(values))]
-    df = DataFrame(zip(values, dates), columns=["profit", "open_date"])
+    df = DataFrame(zip(values, dates, strict=False), columns=["profit", "open_date"])
     # sort by profit and reset index
     df = df.sort_values("profit").reset_index(drop=True)
     df1 = df.copy()
@@ -522,15 +571,16 @@ def test_calculate_max_drawdown2():
     assert drawdown.drawdown_abs == 0.091755
     assert pytest.approx(drawdown.relative_account_drawdown) == 0.32129575
 
-    df = DataFrame(zip(values[:5], dates[:5]), columns=["profit", "open_date"])
-    with pytest.raises(ValueError, match="No losing trade, therefore no drawdown."):
-        calculate_max_drawdown(df, date_col="open_date", value_col="profit")
+    df = DataFrame(zip(values[:5], dates[:5], strict=False), columns=["profit", "open_date"])
+    # No losing trade ...
+    drawdown = calculate_max_drawdown(df, date_col="open_date", value_col="profit")
+    assert drawdown.drawdown_abs == 0.0
 
-    df1 = DataFrame(zip(values[:5], dates[:5]), columns=["profit", "open_date"])
+    df1 = DataFrame(zip(values[:5], dates[:5], strict=False), columns=["profit", "open_date"])
     df1.loc[:, "profit"] = df1["profit"] * -1
     # No winning trade ...
     drawdown = calculate_max_drawdown(df1, date_col="open_date", value_col="profit")
-    assert drawdown.drawdown_abs == 0.043965
+    assert drawdown.drawdown_abs == 0.055545
 
 
 @pytest.mark.parametrize(
@@ -546,9 +596,9 @@ def test_calculate_max_drawdown_abs(profits, relative, highd, lowdays, result, r
     [1000, 500,  1000, 11000, 10000] # absolute results
     [1000, 50%,  0%,   0%,       ~9%]   # Relative drawdowns
     """
-    init_date = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    init_date = datetime(2020, 1, 1, tzinfo=UTC)
     dates = [init_date + timedelta(days=i) for i in range(len(profits))]
-    df = DataFrame(zip(profits, dates), columns=["profit_abs", "open_date"])
+    df = DataFrame(zip(profits, dates, strict=False), columns=["profit_abs", "open_date"])
     # sort by profit and reset index
     df = df.sort_values("profit_abs").reset_index(drop=True)
     df1 = df.copy()
@@ -569,3 +619,22 @@ def test_calculate_max_drawdown_abs(profits, relative, highd, lowdays, result, r
     assert drawdown.high_value > drawdown.low_value
     assert drawdown.drawdown_abs == result
     assert pytest.approx(drawdown.relative_account_drawdown) == result_rel
+
+
+def test_load_file_from_zip(tmp_path):
+    with pytest.raises(ValueError, match=r"Zip file .* not found\."):
+        load_file_from_zip(tmp_path / "test.zip", "testfile.txt")
+
+    (tmp_path / "testfile.zip").touch()
+    with pytest.raises(ValueError, match=r"Bad zip file.*"):
+        load_file_from_zip(tmp_path / "testfile.zip", "testfile.txt")
+
+    zip_file = tmp_path / "testfile2.zip"
+    with ZipFile(zip_file, "w") as zipf:
+        zipf.writestr("testfile.txt", "testfile content")
+
+    content = load_file_from_zip(zip_file, "testfile.txt")
+    assert content.decode("utf-8") == "testfile content"
+
+    with pytest.raises(ValueError, match=r"File .* not found in zip.*"):
+        load_file_from_zip(zip_file, "testfile55.txt")

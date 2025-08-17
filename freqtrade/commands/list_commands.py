@@ -1,33 +1,29 @@
 import csv
 import logging
 import sys
-from typing import Any, Dict, List, Union
+from typing import Any
 
-import rapidjson
-from rich.console import Console
-from rich.table import Table
-from rich.text import Text
-
-from freqtrade.configuration import setup_utils_configuration
 from freqtrade.enums import RunMode
 from freqtrade.exceptions import ConfigurationError, OperationalException
-from freqtrade.exchange import list_available_exchanges, market_is_active
-from freqtrade.misc import parse_db_uri_for_logging, plural
-from freqtrade.resolvers import ExchangeResolver, StrategyResolver
-from freqtrade.types.valid_exchanges_type import ValidExchangesType
-from freqtrade.util import print_rich_table
 
 
 logger = logging.getLogger(__name__)
 
 
-def start_list_exchanges(args: Dict[str, Any]) -> None:
+def start_list_exchanges(args: dict[str, Any]) -> None:
     """
     Print available exchanges
     :param args: Cli args from Arguments()
     :return: None
     """
-    available_exchanges: List[ValidExchangesType] = list_available_exchanges(
+    from rich.table import Table
+    from rich.text import Text
+
+    from freqtrade.exchange import list_available_exchanges
+    from freqtrade.ft_types import ValidExchangesType
+    from freqtrade.loggers.rich_console import get_rich_console
+
+    available_exchanges: list[ValidExchangesType] = list_available_exchanges(
         args["list_exchanges_all"]
     )
 
@@ -50,7 +46,18 @@ def start_list_exchanges(args: Dict[str, Any]) -> None:
         table.add_column("Markets")
         table.add_column("Reason")
 
+        trading_mode = args.get("trading_mode", None)
+        dex_only = args.get("dex_exchanges", False)
+
         for exchange in available_exchanges:
+            if trading_mode and not any(
+                a["trading_mode"] == trading_mode for a in exchange["trade_modes"]
+            ):
+                # If trading_mode is specified, only show exchanges that support it
+                continue
+            if dex_only and not exchange.get("dex", False):
+                # If dex_only is specified, only show DEX exchanges
+                continue
             name = Text(exchange["name"])
             if exchange["supported"]:
                 name.append(" (Supported)", style="italic")
@@ -81,13 +88,18 @@ def start_list_exchanges(args: Dict[str, Any]) -> None:
             )
             # table.add_row(*[exchange[header] for header in headers])
 
-        console = Console()
+        console = get_rich_console()
         console.print(table)
 
 
-def _print_objs_tabular(objs: List, print_colorized: bool) -> None:
+def _print_objs_tabular(objs: list, print_colorized: bool) -> None:
+    from rich.table import Table
+    from rich.text import Text
+
+    from freqtrade.loggers.rich_console import get_rich_console
+
     names = [s["name"] for s in objs]
-    objs_to_print: List[Dict[str, Union[Text, str]]] = [
+    objs_to_print: list[dict[str, Text | str]] = [
         {
             "name": Text(s["name"] if s["name"] else "--"),
             "location": s["location_rel"],
@@ -118,22 +130,25 @@ def _print_objs_tabular(objs: List, print_colorized: bool) -> None:
     for row in objs_to_print:
         table.add_row(*[row[header] for header in objs_to_print[0].keys()])
 
-    console = Console(
-        color_system="auto" if print_colorized else None,
-        width=200 if "pytest" in sys.modules else None,
-    )
+    console = get_rich_console(color_system="auto" if print_colorized else None)
     console.print(table)
 
 
-def start_list_strategies(args: Dict[str, Any]) -> None:
+def start_list_strategies(args: dict[str, Any]) -> None:
     """
     Print files with Strategy custom classes available in the directory
     """
+    from freqtrade.configuration import setup_utils_configuration
+    from freqtrade.resolvers import StrategyResolver
+
     config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)
 
     strategy_objs = StrategyResolver.search_all_objects(
         config, not args["print_one_column"], config.get("recursive_strategy_search", False)
     )
+    if not strategy_objs:
+        logger.warning("No strategies found.")
+        return
     # Sort alphabetically
     strategy_objs = sorted(strategy_objs, key=lambda x: x["name"])
     for obj in strategy_objs:
@@ -148,12 +163,14 @@ def start_list_strategies(args: Dict[str, Any]) -> None:
         _print_objs_tabular(strategy_objs, config.get("print_colorized", False))
 
 
-def start_list_freqAI_models(args: Dict[str, Any]) -> None:
+def start_list_freqAI_models(args: dict[str, Any]) -> None:
     """
     Print files with FreqAI models custom classes available in the directory
     """
-    config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)
+    from freqtrade.configuration import setup_utils_configuration
     from freqtrade.resolvers.freqaimodel_resolver import FreqaiModelResolver
+
+    config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)
 
     model_objs = FreqaiModelResolver.search_all_objects(config, not args["print_one_column"])
     # Sort alphabetically
@@ -164,10 +181,31 @@ def start_list_freqAI_models(args: Dict[str, Any]) -> None:
         _print_objs_tabular(model_objs, config.get("print_colorized", False))
 
 
-def start_list_timeframes(args: Dict[str, Any]) -> None:
+def start_list_hyperopt_loss_functions(args: dict[str, Any]) -> None:
+    """
+    Print files with FreqAI models custom classes available in the directory
+    """
+    from freqtrade.configuration import setup_utils_configuration
+    from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
+
+    config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)
+
+    model_objs = HyperOptLossResolver.search_all_objects(config, not args["print_one_column"])
+    # Sort alphabetically
+    model_objs = sorted(model_objs, key=lambda x: x["name"])
+    if args["print_one_column"]:
+        print("\n".join([s["name"] for s in model_objs]))
+    else:
+        _print_objs_tabular(model_objs, config.get("print_colorized", False))
+
+
+def start_list_timeframes(args: dict[str, Any]) -> None:
     """
     Print timeframes available on Exchange
     """
+    from freqtrade.configuration import setup_utils_configuration
+    from freqtrade.resolvers import ExchangeResolver
+
     config = setup_utils_configuration(args, RunMode.UTIL_EXCHANGE)
     # Do not use timeframe set in the config
     config["timeframe"] = None
@@ -184,13 +222,19 @@ def start_list_timeframes(args: Dict[str, Any]) -> None:
         )
 
 
-def start_list_markets(args: Dict[str, Any], pairs_only: bool = False) -> None:
+def start_list_markets(args: dict[str, Any], pairs_only: bool = False) -> None:
     """
     Print pairs/markets on the exchange
     :param args: Cli args from Arguments()
     :param pairs_only: if True print only pairs, otherwise print all instruments (markets)
     :return: None
     """
+    from freqtrade.configuration import setup_utils_configuration
+    from freqtrade.exchange import market_is_active
+    from freqtrade.misc import plural, safe_value_fallback
+    from freqtrade.resolvers import ExchangeResolver
+    from freqtrade.util import print_rich_table
+
     config = setup_utils_configuration(args, RunMode.UTIL_EXCHANGE)
 
     # Init exchange
@@ -214,94 +258,109 @@ def start_list_markets(args: Dict[str, Any], pairs_only: bool = False) -> None:
     except Exception as e:
         raise OperationalException(f"Cannot get markets. Reason: {e}") from e
 
-    else:
-        summary_str = (
-            (f"Exchange {exchange.name} has {len(pairs)} ")
-            + ("active " if active_only else "")
-            + (plural(len(pairs), "pair" if pairs_only else "market"))
-            + (
-                f" with {', '.join(base_currencies)} as base "
-                f"{plural(len(base_currencies), 'currency', 'currencies')}"
-                if base_currencies
-                else ""
-            )
-            + (" and" if base_currencies and quote_currencies else "")
-            + (
-                f" with {', '.join(quote_currencies)} as quote "
-                f"{plural(len(quote_currencies), 'currency', 'currencies')}"
-                if quote_currencies
-                else ""
-            )
+    tickers = exchange.get_tickers()
+
+    summary_str = (
+        (f"Exchange {exchange.name} has {len(pairs)} ")
+        + ("active " if active_only else "")
+        + (plural(len(pairs), "pair" if pairs_only else "market"))
+        + (
+            f" with {', '.join(base_currencies)} as base "
+            f"{plural(len(base_currencies), 'currency', 'currencies')}"
+            if base_currencies
+            else ""
         )
+        + (" and" if base_currencies and quote_currencies else "")
+        + (
+            f" with {', '.join(quote_currencies)} as quote "
+            f"{plural(len(quote_currencies), 'currency', 'currencies')}"
+            if quote_currencies
+            else ""
+        )
+    )
 
-        headers = [
-            "Id",
-            "Symbol",
-            "Base",
-            "Quote",
-            "Active",
-            "Spot",
-            "Margin",
-            "Future",
-            "Leverage",
-        ]
+    headers = [
+        "Id",
+        "Symbol",
+        "Base",
+        "Quote",
+        "Active",
+        "Spot",
+        "Margin",
+        "Future",
+        "Leverage",
+        "Min Stake",
+    ]
 
-        tabular_data = [
-            {
-                "Id": v["id"],
-                "Symbol": v["symbol"],
-                "Base": v["base"],
-                "Quote": v["quote"],
-                "Active": market_is_active(v),
-                "Spot": "Spot" if exchange.market_is_spot(v) else "",
-                "Margin": "Margin" if exchange.market_is_margin(v) else "",
-                "Future": "Future" if exchange.market_is_future(v) else "",
-                "Leverage": exchange.get_max_leverage(v["symbol"], 20),
-            }
-            for _, v in pairs.items()
-        ]
+    tabular_data = [
+        {
+            "Id": v["id"],
+            "Symbol": v["symbol"],
+            "Base": v["base"],
+            "Quote": v["quote"],
+            "Active": market_is_active(v),
+            "Spot": "Spot" if exchange.market_is_spot(v) else "",
+            "Margin": "Margin" if exchange.market_is_margin(v) else "",
+            "Future": "Future" if exchange.market_is_future(v) else "",
+            "Leverage": exchange.get_max_leverage(v["symbol"], 20),
+            "Min Stake": round(
+                exchange.get_min_pair_stake_amount(
+                    v["symbol"],
+                    safe_value_fallback(tickers.get(v["symbol"], {}), "last", "ask", 0.0),
+                    0.0,
+                )
+                or 0.0,
+                8,
+            ),
+        }
+        for _, v in pairs.items()
+    ]
 
-        if (
-            args.get("print_one_column", False)
-            or args.get("list_pairs_print_json", False)
-            or args.get("print_csv", False)
-        ):
-            # Print summary string in the log in case of machine-readable
-            # regular formats.
-            logger.info(f"{summary_str}.")
+    if (
+        args.get("print_one_column", False)
+        or args.get("list_pairs_print_json", False)
+        or args.get("print_csv", False)
+    ):
+        # Print summary string in the log in case of machine-readable
+        # regular formats.
+        logger.info(f"{summary_str}.")
+    else:
+        # Print empty string separating leading logs and output in case of
+        # human-readable formats.
+        print()
+
+    if pairs:
+        if args.get("print_list", False):
+            # print data as a list, with human-readable summary
+            print(f"{summary_str}: {', '.join(pairs.keys())}.")
+        elif args.get("print_one_column", False):
+            print("\n".join(pairs.keys()))
+        elif args.get("list_pairs_print_json", False):
+            import rapidjson
+
+            print(rapidjson.dumps(list(pairs.keys()), default=str))
+        elif args.get("print_csv", False):
+            writer = csv.DictWriter(sys.stdout, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(tabular_data)
         else:
-            # Print empty string separating leading logs and output in case of
-            # human-readable formats.
-            print()
-
-        if pairs:
-            if args.get("print_list", False):
-                # print data as a list, with human-readable summary
-                print(f"{summary_str}: {', '.join(pairs.keys())}.")
-            elif args.get("print_one_column", False):
-                print("\n".join(pairs.keys()))
-            elif args.get("list_pairs_print_json", False):
-                print(rapidjson.dumps(list(pairs.keys()), default=str))
-            elif args.get("print_csv", False):
-                writer = csv.DictWriter(sys.stdout, fieldnames=headers)
-                writer.writeheader()
-                writer.writerows(tabular_data)
-            else:
-                print_rich_table(tabular_data, headers, summary_str)
-        elif not (
-            args.get("print_one_column", False)
-            or args.get("list_pairs_print_json", False)
-            or args.get("print_csv", False)
-        ):
-            print(f"{summary_str}.")
+            print_rich_table(tabular_data, headers, summary_str)
+    elif not (
+        args.get("print_one_column", False)
+        or args.get("list_pairs_print_json", False)
+        or args.get("print_csv", False)
+    ):
+        print(f"{summary_str}.")
 
 
-def start_show_trades(args: Dict[str, Any]) -> None:
+def start_show_trades(args: dict[str, Any]) -> None:
     """
     Show trades
     """
     import json
 
+    from freqtrade.configuration import setup_utils_configuration
+    from freqtrade.misc import parse_db_uri_for_logging
     from freqtrade.persistence import Trade, init_db
 
     config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)

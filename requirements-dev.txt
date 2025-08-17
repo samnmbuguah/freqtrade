@@ -6,27 +6,27 @@
 -r requirements-freqai-rl.txt
 -r docs/requirements-docs.txt
 
-coveralls==4.0.1
-ruff==0.6.3
-mypy==1.11.2
-pre-commit==3.8.0
-pytest==8.3.2
-pytest-asyncio==0.24.0
-pytest-cov==5.0.0
-pytest-mock==3.14.0
-pytest-random-order==1.1.1
-pytest-timeout==2.3.1
-pytest-xdist==3.6.1
-isort==5.13.2
+ruff==0.12.8
+mypy==1.17.1
+pre-commit==4.3.0
+pytest==8.4.1
+pytest-asyncio==1.1.0
+pytest-cov==6.2.1
+pytest-mock==3.14.1
+pytest-random-order==1.2.0
+pytest-timeout==2.4.0
+pytest-xdist==3.8.0
+isort==6.0.1
 # For datetime mocking
-time-machine==2.15.0
+time-machine==2.17.0
 
 # Convert jupyter notebooks to markdown documents
-nbconvert==7.16.4
+nbconvert==7.16.6
 
 # mypy types
-types-cachetools==5.5.0.20240820
+scipy-stubs==1.16.1.0  # keep in sync with `scipy` in `requirements-hyperopt.txt`
+types-cachetools==6.1.0.20250717
 types-filelock==3.2.7
-types-requests==2.32.0.20240712
-types-tabulate==0.9.0.20240106
-types-python-dateutil==2.9.0.20240821
+types-requests==2.32.4.20250809
+types-tabulate==0.9.0.20241207
+types-python-dateutil==2.9.0.20250809

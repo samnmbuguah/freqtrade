@@ -1,9 +1,10 @@
 import logging
+import numbers
 import shutil
 from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from pandas import DataFrame
 
@@ -14,31 +15,27 @@ from freqtrade.loggers.set_log_levels import (
 )
 from freqtrade.optimize.backtesting import Backtesting
 from freqtrade.optimize.base_analysis import BaseAnalysis, VarHolder
-from freqtrade.resolvers import StrategyResolver
 
 
 logger = logging.getLogger(__name__)
 
 
+def is_number(variable):
+    return isinstance(variable, numbers.Number) and not isinstance(variable, bool)
+
+
 class RecursiveAnalysis(BaseAnalysis):
-    def __init__(self, config: Dict[str, Any], strategy_obj: Dict):
+    def __init__(self, config: dict[str, Any], strategy_obj: dict):
         self._startup_candle = list(
             map(int, config.get("startup_candle", [199, 399, 499, 999, 1999]))
         )
 
         super().__init__(config, strategy_obj)
 
-        strat = StrategyResolver.load_strategy(config)
-        self._strat_scc = strat.startup_candle_count
+        self.partial_varHolder_array: list[VarHolder] = []
+        self.partial_varHolder_lookahead_array: list[VarHolder] = []
 
-        if self._strat_scc not in self._startup_candle:
-            self._startup_candle.append(self._strat_scc)
-        self._startup_candle.sort()
-
-        self.partial_varHolder_array: List[VarHolder] = []
-        self.partial_varHolder_lookahead_array: List[VarHolder] = []
-
-        self.dict_recursive: Dict[str, Any] = dict()
+        self.dict_recursive: dict[str, Any] = dict()
 
     # For recursive bias check
     # analyzes two data frames with processed indicators and shows differences between them.
@@ -69,7 +66,12 @@ class RecursiveAnalysis(BaseAnalysis):
                         values_diff_self = values_diff.loc["self"]
                         values_diff_other = values_diff.loc["other"]
 
-                        if values_diff_self and values_diff_other:
+                        if (
+                            values_diff_self
+                            and values_diff_other
+                            and is_number(values_diff_self)
+                            and is_number(values_diff_other)
+                        ):
                             diff = (values_diff_other - values_diff_self) / values_diff_self * 100
                             str_diff = f"{diff:.3f}%"
                         else:
@@ -114,7 +116,7 @@ class RecursiveAnalysis(BaseAnalysis):
         else:
             logger.info("No lookahead bias on indicators found.")
 
-    def prepare_data(self, varholder: VarHolder, pairs_to_load: List[DataFrame]):
+    def prepare_data(self, varholder: VarHolder, pairs_to_load: list[DataFrame]):
         if "freqai" in self.local_config and "identifier" in self.local_config["freqai"]:
             # purge previous data if the freqai model is defined
             # (to be sure nothing is carried over from older backtests)
@@ -136,10 +138,17 @@ class RecursiveAnalysis(BaseAnalysis):
 
         backtesting = Backtesting(prepare_data_config, self.exchange)
         self.exchange = backtesting.exchange
+        self.local_config["candle_type_def"] = prepare_data_config["candle_type_def"]
         backtesting._set_strategy(backtesting.strategylist[0])
 
+        strat = backtesting.strategy
+        self._strat_scc = strat.startup_candle_count
+
+        if self._strat_scc not in self._startup_candle:
+            self._startup_candle.append(self._strat_scc)
+        self._startup_candle.sort()
+
         varholder.data, varholder.timerange = backtesting.load_bt_data()
-        backtesting.load_bt_data_detail()
         varholder.timeframe = backtesting.timeframe
 
         varholder.indicators = backtesting.strategy.advise_all_indicators(varholder.data)

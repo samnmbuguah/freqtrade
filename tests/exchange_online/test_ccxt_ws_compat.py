@@ -12,7 +12,6 @@ import pytest
 
 from freqtrade.enums import CandleType
 from freqtrade.exchange.exchange_utils import timeframe_to_prev_date
-from freqtrade.loggers.set_log_levels import set_loggers
 from freqtrade.util.datetime_helpers import dt_now
 from tests.conftest import log_has_re
 from tests.exchange_online.conftest import EXCHANGE_WS_FIXTURE_TYPE
@@ -36,22 +35,22 @@ class TestCCXTExchangeWs:
                 break
             sleep(1)
 
+        caplog.set_level(logging.DEBUG)
         res = exch.refresh_latest_ohlcv([pair_tf])
         assert m_cand.call_count == 1
 
         # Currently open candle
         next_candle = timeframe_to_prev_date(timeframe, dt_now())
-        now = next_candle - timedelta(seconds=1)
         # Currently closed candle
-        curr_candle = timeframe_to_prev_date(timeframe, now)
+        curr_candle = timeframe_to_prev_date(timeframe, next_candle - timedelta(seconds=1))
 
         assert pair_tf in exch._exchange_ws._klines_watching
         assert pair_tf in exch._exchange_ws._klines_scheduled
         assert res[pair_tf] is not None
         df1 = res[pair_tf]
-        caplog.set_level(logging.DEBUG)
-        set_loggers(1)
-        assert df1.iloc[-1]["date"] == curr_candle
+        assert df1.iloc[-1]["date"] == curr_candle, (
+            f"Expected {curr_candle}, got {df1.iloc[-1]['date']} for {pair_tf}, now: {dt_now()}"
+        )
 
         # Wait until the next candle (might be up to 1 minute).
         while True:

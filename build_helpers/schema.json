@@ -13,6 +13,10 @@
       "description": "The timeframe to use (e.g `1m`, `5m`, `15m`, `30m`, `1h` ...). \nUsually specified in the strategy and missing in the configuration.",
       "type": "string"
     },
+    "proxy_coin": {
+      "description": "Proxy coin - must be used for specific futures modes (e.g. BNFCR)",
+      "type": "string"
+    },
     "stake_currency": {
       "description": "Currency used for staking.",
       "type": "string"
@@ -102,8 +106,17 @@
     },
     "dry_run_wallet": {
       "description": "Initial wallet balance for dry run mode.",
-      "type": "number",
-      "default": 1000
+      "type": [
+        "number",
+        "object"
+      ],
+      "default": 1000,
+      "patternProperties": {
+        "^[a-zA-Z0-9]+$": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
     },
     "cancel_open_orders_on_exit": {
       "description": "Cancel open orders when exiting.",
@@ -166,6 +179,16 @@
     "exit_profit_offset": {
       "description": "Offset for profit exit. \nUsually specified in the strategy and missing in the configuration.",
       "type": "number"
+    },
+    "recursive_strategy_search": {
+      "description": "Enable recursive strategy search.",
+      "type": "boolean"
+    },
+    "user_data_dir": {
+      "description": "Path to the user data directory."
+    },
+    "datadir": {
+      "description": "Path to the data directory."
     },
     "fee": {
       "description": "Trading fee percentage. Can help to simulate slippage in backtesting",
@@ -244,7 +267,8 @@
         "enum": [
           "day",
           "week",
-          "month"
+          "month",
+          "year"
         ]
       }
     },
@@ -524,9 +548,9 @@
       "description": "Exchange configuration.",
       "$ref": "#/definitions/exchange"
     },
-    "edge": {
-      "description": "Edge configuration.",
-      "$ref": "#/definitions/edge"
+    "log_config": {
+      "description": "Logging configuration.",
+      "$ref": "#/definitions/logging"
     },
     "freqai": {
       "description": "FreqAI configuration.",
@@ -548,6 +572,7 @@
     "pairlists": {
       "description": "Configuration for pairlists.",
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "properties": {
@@ -579,57 +604,6 @@
         ]
       }
     },
-    "protections": {
-      "description": "Configuration for various protections.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "method": {
-            "description": "Method used for the protection.",
-            "type": "string",
-            "enum": [
-              "CooldownPeriod",
-              "LowProfitPairs",
-              "MaxDrawdown",
-              "StoplossGuard"
-            ]
-          },
-          "stop_duration": {
-            "description": "Duration to lock the pair after a protection is triggered, in minutes.",
-            "type": "number",
-            "minimum": 0.0
-          },
-          "stop_duration_candles": {
-            "description": "Duration to lock the pair after a protection is triggered, in number of candles.",
-            "type": "number",
-            "minimum": 0
-          },
-          "unlock_at": {
-            "description": "Time when trading will be unlocked regularly. Format: HH:MM",
-            "type": "string"
-          },
-          "trade_limit": {
-            "description": "Minimum number of trades required during lookback period.",
-            "type": "number",
-            "minimum": 1
-          },
-          "lookback_period": {
-            "description": "Period to look back for protection checks, in minutes.",
-            "type": "number",
-            "minimum": 1
-          },
-          "lookback_period_candles": {
-            "description": "Period to look back for protection checks, in number of candles.",
-            "type": "number",
-            "minimum": 1
-          }
-        },
-        "required": [
-          "method"
-        ]
-      }
-    },
     "telegram": {
       "description": "Telegram settings.",
       "type": "object",
@@ -643,8 +617,20 @@
           "type": "string"
         },
         "chat_id": {
-          "description": "Telegram chat ID",
+          "description": "Telegram chat or group ID. Recommended to be set via environment variable FREQTRADE__TELEGRAM__CHAT_ID",
           "type": "string"
+        },
+        "topic_id": {
+          "description": "Telegram topic ID - only applicable for group chats. Recommended to be set via environment variable FREQTRADE__TELEGRAM__TOPIC_ID",
+          "type": "string"
+        },
+        "authorized_users": {
+          "description": "Authorized users for the bot.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
         },
         "allow_custom_messages": {
           "description": "Allow sending custom messages from the Strategy.",
@@ -733,12 +719,18 @@
             },
             "exit_fill": {
               "description": "Telegram setting for exit fill signals.",
-              "type": "string",
-              "enum": [
-                "on",
-                "off",
-                "silent"
+              "type": [
+                "string",
+                "object"
               ],
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "on",
+                  "off",
+                  "silent"
+                ]
+              },
               "default": "on"
             },
             "exit_cancel": {
@@ -788,9 +780,11 @@
       "type": "object",
       "properties": {
         "enabled": {
+          "description": "Enable webhook notifications.",
           "type": "boolean"
         },
         "url": {
+          "description": "Webhook URL. Recommended to be set via environment variable FREQTRADE__WEBHOOK__URL",
           "type": "string"
         },
         "format": {
@@ -868,6 +862,7 @@
           "type": "boolean"
         },
         "webhook_url": {
+          "description": "Discord webhook URL. Recommended to be set via environment variable FREQTRADE__DISCORD__WEBHOOK_URL",
           "type": "string"
         },
         "exit_fill": {
@@ -1007,7 +1002,7 @@
             "type": "string"
           }
         },
-        "x": {
+        "verbosity": {
           "description": "Logging verbosity level.",
           "type": "string",
           "enum": [
@@ -1047,6 +1042,7 @@
       "type": "string",
       "enum": [
         "running",
+        "paused",
         "stopped"
       ]
     },
@@ -1083,7 +1079,6 @@
       "enum": [
         "json",
         "jsongz",
-        "hdf5",
         "feather",
         "parquet"
       ],
@@ -1095,7 +1090,6 @@
       "enum": [
         "json",
         "jsongz",
-        "hdf5",
         "feather",
         "parquet"
       ],
@@ -1184,28 +1178,35 @@
           "description": "Name of the exchange.",
           "type": "string"
         },
-        "enable_ws": {
-          "description": "Enable WebSocket connections to the exchange.",
-          "type": "boolean",
-          "default": true
-        },
         "key": {
-          "description": "API key for the exchange.",
+          "description": "API key for the exchange. Recommended to be set via environment variable FREQTRADE__EXCHANGE__KEY",
           "type": "string",
           "default": ""
         },
         "secret": {
-          "description": "API secret for the exchange.",
+          "description": "API secret for the exchange. Recommended to be set via environment variable FREQTRADE__EXCHANGE__SECRET",
           "type": "string",
           "default": ""
         },
         "password": {
-          "description": "Password for the exchange, if required.",
+          "description": "Password for the exchange, if required. Recommended to be set via environment variable FREQTRADE__EXCHANGE__PASSWORD",
           "type": "string",
           "default": ""
         },
         "uid": {
-          "description": "User ID for the exchange, if required.",
+          "description": "User ID for the exchange, if required. Recommended to be set via environment variable FREQTRADE__EXCHANGE__UID",
+          "type": "string"
+        },
+        "account_id": {
+          "description": "Account ID for the exchange, if required. Recommended to be set via environment variable FREQTRADE__EXCHANGE__ACCOUNT_ID",
+          "type": "string"
+        },
+        "wallet_address": {
+          "description": "Wallet address for the exchange, if required. Usually used by DEX exchanges. Recommended to be set via environment variable FREQTRADE__EXCHANGE__WALLET_ADDRESS",
+          "type": "string"
+        },
+        "private_key": {
+          "description": "Private key for the exchange, if required. Usually used by DEX exchanges. Recommended to be set via environment variable FREQTRADE__EXCHANGE__PRIVATE_KEY",
           "type": "string"
         },
         "pair_whitelist": {
@@ -1229,6 +1230,11 @@
           "type": "boolean",
           "default": false
         },
+        "enable_ws": {
+          "description": "Enable WebSocket connections to the exchange.",
+          "type": "boolean",
+          "default": true
+        },
         "unknown_fee_rate": {
           "description": "Fee rate for unknown markets.",
           "type": "number"
@@ -1248,7 +1254,11 @@
           "type": "object"
         },
         "ccxt_async_config": {
-          "description": "CCXT asynchronous configuration settings.",
+          "description": "CCXT asynchronous configuration settings.Usually ccxt_config should be used instead.",
+          "type": "object"
+        },
+        "ccxt_sync_config": {
+          "description": "CCXT synchronous configuration settings. Usually ccxt_config should be used instead.",
           "type": "object"
         }
       },
@@ -1256,50 +1266,28 @@
         "name"
       ]
     },
-    "edge": {
+    "logging": {
       "type": "object",
       "properties": {
-        "enabled": {
-          "type": "boolean"
+        "version": {
+          "type": "number",
+          "const": 1
         },
-        "process_throttle_secs": {
-          "type": "integer",
-          "minimum": 600
+        "formatters": {
+          "type": "object"
         },
-        "calculate_since_number_of_days": {
-          "type": "integer"
+        "handlers": {
+          "type": "object"
         },
-        "allowed_risk": {
-          "type": "number"
-        },
-        "stoploss_range_min": {
-          "type": "number"
-        },
-        "stoploss_range_max": {
-          "type": "number"
-        },
-        "stoploss_range_step": {
-          "type": "number"
-        },
-        "minimum_winrate": {
-          "type": "number"
-        },
-        "minimum_expectancy": {
-          "type": "number"
-        },
-        "min_trade_number": {
-          "type": "number"
-        },
-        "max_trade_duration_minute": {
-          "type": "integer"
-        },
-        "remove_pumps": {
-          "type": "boolean"
+        "root": {
+          "type": "object"
         }
       },
       "required": [
-        "process_throttle_secs",
-        "allowed_risk"
+        "version",
+        "formatters",
+        "handlers",
+        "root"
       ]
     },
     "external_message_consumer": {
@@ -1396,10 +1384,10 @@
           "type": "boolean",
           "default": false
         },
-        "keras": {
-          "description": "Use Keras for model training.",
-          "type": "boolean",
-          "default": false
+        "identifier": {
+          "description": "A unique ID for the current model. Must be changed when modifying features.",
+          "type": "string",
+          "default": "example"
         },
         "write_metrics_to_disk": {
           "description": "Write metrics to disk?",
@@ -1429,10 +1417,48 @@
           "type": "number",
           "default": 7
         },
-        "identifier": {
-          "description": "A unique ID for the current model. Must be changed when modifying features.",
-          "type": "string",
-          "default": "example"
+        "live_retrain_hours": {
+          "description": "Frequency of retraining during dry/live runs.",
+          "type": "number",
+          "default": 0
+        },
+        "expiration_hours": {
+          "description": "Avoid making predictions if a model is more than `expiration_hours` old. Defaults to 0 (no expiration).",
+          "type": "number",
+          "default": 0
+        },
+        "save_backtest_models": {
+          "description": "Save models to disk when running backtesting.",
+          "type": "boolean",
+          "default": false
+        },
+        "fit_live_predictions_candles": {
+          "description": "Number of historical candles to use for computing target (label) statistics from prediction data, instead of from the training dataset.",
+          "type": "integer"
+        },
+        "data_kitchen_thread_count": {
+          "description": "Designate the number of threads you want to use for data processing (outlier methods, normalization, etc.).",
+          "type": "integer"
+        },
+        "activate_tensorboard": {
+          "description": "Indicate whether or not to activate tensorboard",
+          "type": "boolean",
+          "default": true
+        },
+        "wait_for_training_iteration_on_reload": {
+          "description": "Wait for the next training iteration to complete after /reload or ctrl+c.",
+          "type": "boolean",
+          "default": true
+        },
+        "continual_learning": {
+          "description": "Use the final state of the most recently trained model as starting point for the new model, allowing for incremental learning.",
+          "type": "boolean",
+          "default": false
+        },
+        "keras": {
+          "description": "Use Keras for model training.",
+          "type": "boolean",
+          "default": false
         },
         "feature_parameters": {
           "description": "The parameters used to engineer the feature set",
@@ -1469,6 +1495,14 @@
               "description": "Automatically reduce the dimensionality of the data set using Principal Component Analysis",
               "type": "boolean",
               "default": false
+            },
+            "indicator_periods_candles": {
+              "description": "Time periods to calculate indicators for. The indicators are added to the base indicator dataset.",
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 1
+              }
             },
             "use_SVM_to_remove_outliers": {
               "description": "Use SVM to remove outliers from the features.",

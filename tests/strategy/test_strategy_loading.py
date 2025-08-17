@@ -154,7 +154,7 @@ def test_strategy_can_short(caplog, default_conf):
     strat = StrategyResolver.load_strategy(default_conf)
     assert isinstance(strat, IStrategy)
     default_conf["strategy"] = "StrategyTestV3Futures"
-    with pytest.raises(ImportError, match=""):
+    with pytest.raises(ImportError, match="Short strategies cannot run in spot markets"):
         StrategyResolver.load_strategy(default_conf)
 
     default_conf["trading_mode"] = "futures"
@@ -385,6 +385,17 @@ def test_strategy_max_open_trades_infinity_from_strategy(caplog, default_conf):
     assert strategy.max_open_trades == float("inf")
     assert default_conf["max_open_trades"] == float("inf")
 
+    # test if the default value is set to infinity (V2 doesn't set max_open_trades explicitly)
+    del default_conf["max_open_trades"]
+    default_conf.update(
+        {
+            "strategy": "StrategyTestV2",
+        }
+    )
+    strategy2 = StrategyResolver.load_strategy(default_conf)
+    assert strategy2.max_open_trades == float("inf")
+    assert default_conf["max_open_trades"] == float("inf")
+
 
 def test_strategy_max_open_trades_infinity_from_config(caplog, default_conf, mocker):
     caplog.set_level(logging.INFO)
@@ -458,6 +469,10 @@ def test_missing_implements(default_conf, caplog):
     with pytest.raises(
         OperationalException, match=r"Please migrate your implementation of `check_sell_timeout`.*"
     ):
+        StrategyResolver.load_strategy(default_conf)
+
+    default_conf["strategy"] = "TestStrategyAdjustOrderPrice"
+    with pytest.raises(OperationalException, match=r"If you implement `adjust_order_price`.*"):
         StrategyResolver.load_strategy(default_conf)
 
 

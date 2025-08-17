@@ -1,4 +1,6 @@
-from freqtrade.util import decimals_per_coin, fmt_coin, round_value
+from datetime import timedelta
+
+from freqtrade.util import decimals_per_coin, fmt_coin, fmt_coin2, format_duration, round_value
 
 
 def test_decimals_per_coin():
@@ -25,6 +27,16 @@ def test_fmt_coin():
     assert fmt_coin(222.2, "USDT", False, True) == "222.200"
 
 
+def test_fmt_coin2():
+    assert fmt_coin2(222.222222, "USDT") == "222.222222 USDT"
+    assert fmt_coin2(222.2, "XRP", 3, keep_trailing_zeros=True) == "222.200 XRP"
+    assert fmt_coin2(222.2, "USDT") == "222.2 USDT"
+    assert fmt_coin2(222.12745, "EUR") == "222.12745 EUR"
+    assert fmt_coin2(0.1274512123, "BTC") == "0.12745121 BTC"
+    assert fmt_coin2(0.1274512123, "ETH") == "0.12745121 ETH"
+    assert fmt_coin2(0.00001245, "PEPE") == "0.00001245 PEPE"
+
+
 def test_round_value():
     assert round_value(222.222222, 3) == "222.222"
     assert round_value(222.2, 3) == "222.2"
@@ -34,3 +46,12 @@ def test_round_value():
     assert round_value(0.1274512123, 5) == "0.12745"
     assert round_value(222.2, 3, True) == "222.200"
     assert round_value(222.2, 0, True) == "222"
+
+
+def test_format_duration():
+    assert format_duration(timedelta(minutes=5)) == "0d 00:05"
+    assert format_duration(timedelta(minutes=75)) == "0d 01:15"
+    assert format_duration(timedelta(minutes=1440)) == "1d 00:00"
+    assert format_duration(timedelta(minutes=1445)) == "1d 00:05"
+    assert format_duration(timedelta(minutes=11445)) == "7d 22:45"
+    assert format_duration(timedelta(minutes=101445)) == "70d 10:45"

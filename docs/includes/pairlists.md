@@ -44,9 +44,24 @@ You may also use something like `.*DOWN/BTC` or `.*UP/BTC` to exclude leveraged 
 
 By default, the `StaticPairList` method is used, which uses a statically defined pair whitelist from the configuration. The pairlist also supports wildcards (in regex-style) - so `.*/BTC` will include all pairs with BTC as a stake.
 
-It uses configuration from `exchange.pair_whitelist` and `exchange.pair_blacklist`.
+It uses configuration from `exchange.pair_whitelist` and `exchange.pair_blacklist`, which in the below example, will trade BTC/USDT and ETH/USDT - and will prevent BNB/USDT trading.
+
+Both `pair_*list` parameters support regex - so values like  `.*/USDT` would enable trading all pairs that are not in the blacklist.
 
 ```json
+"exchange": {
+    "name": "...",
+    // ... 
+    "pair_whitelist": [
+        "BTC/USDT",
+        "ETH/USDT",
+        // ...
+    ],
+    "pair_blacklist": [
+        "BNB/USDT",
+        // ...
+    ]
+},
 "pairlists": [
     {"method": "StaticPairList"}
 ],
@@ -55,7 +70,6 @@ It uses configuration from `exchange.pair_whitelist` and `exchange.pair_blacklis
 By default, only currently enabled pairs are allowed.
 To skip pair validation against active markets, set `"allow_inactive": true` within the `StaticPairList` configuration.
 This can be useful for backtesting expired pairs (like quarterly spot-markets).
-This option must be configured along with `exchange.skip_pair_validation` in the exchange configuration.
 
 When used in a "follow-up" position (e.g. after VolumePairlist), all pairs in `'pair_whitelist'` will be added to the end of the pairlist.
 
@@ -353,7 +367,7 @@ The optional `bearer_token` will be included in the requests Authorization Heade
 
 #### MarketCapPairList
 
-`MarketCapPairList` employs sorting/filtering of pairs by their marketcap rank based of CoinGecko. It will only recognize coins up to the coin placed at rank 250. The returned pairlist will be sorted based of their marketcap ranks.
+`MarketCapPairList` employs sorting/filtering of pairs by their marketcap rank based of CoinGecko. The returned pairlist will be sorted based of their marketcap ranks.
 
 ```json
 "pairlists": [
@@ -361,14 +375,25 @@ The optional `bearer_token` will be included in the requests Authorization Heade
         "method": "MarketCapPairList",
         "number_assets": 20,
         "max_rank": 50,
-        "refresh_period": 86400
+        "refresh_period": 86400,
+        "categories": ["layer-1"]
     }
 ]
 ```
 
-`number_assets` defines the maximum number of pairs returned by the pairlist. `max_rank` will determine the maximum rank used in creating/filtering the pairlist. It's expected that some coins within the top `max_rank` marketcap will not be included in the resulting pairlist since not all pairs will have active trading pairs in your preferred market/stake/exchange combination.
+`number_assets` defines the maximum number of pairs returned by the pairlist. `max_rank` will determine the maximum rank used in creating/filtering the pairlist. It's expected that some coins within the top `max_rank` marketcap will not be included in the resulting pairlist since not all pairs will have active trading pairs in your preferred market/stake/exchange combination.  
+While using a `max_rank` bigger than 250 is supported, it's not recommended, as it'll cause multiple API calls to CoinGecko, which can lead to rate limit issues.
 
-`refresh_period` setting defines the period (in seconds) at which the marketcap rank data will be refreshed. Defaults to 86,400s (1 day). The pairlist cache (`refresh_period`) is applicable on both generating pairlists (first position in the list) and filtering instances (not the first position in the list).
+The `refresh_period` setting defines the interval (in seconds) at which the marketcap rank data will be refreshed. The default is 86,400 seconds (1 day). The pairlist cache (`refresh_period`) applies to both generating pairlists (when in the first position in the list) and filtering instances (when not in the first position in the list).
+
+The `categories` setting specifies the [coingecko categories](https://www.coingecko.com/en/categories) from which to select coins from. The default is an empty list `[]`, meaning no category filtering is applied.
+If an incorrect category string is chosen, the plugin will print the available categories from CoinGecko and fail. The category should be the ID of the category, for example, for `https://www.coingecko.com/en/categories/layer-1`, the category ID would be `layer-1`. You can pass multiple categories such as `["layer-1", "meme-token"]` to select from several categories.
+
+!!! Warning "Many categories"
+    Each added category corresponds to one API call to CoinGecko. The more categories you add, the longer the pairlist generation will take, potentially causing rate limit issues.
+
+!!! Danger "Duplicate symbols in coingecko"
+    Coingecko often has duplicate symbols, where the same symbol is used for different coins. Freqtrade will use the symbol as is and try to search for it on the exchange. If the symbol exists - it will be used. Freqtrade will however not check if the _intended_ symbol is the one coingecko meant. This can sometimes lead to unexpected results, especially on low volume coins or with meme coin categories.
 
 #### AgeFilter
 

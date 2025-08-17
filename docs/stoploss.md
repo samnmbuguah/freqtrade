@@ -30,12 +30,14 @@ The Order-type will be ignored if only one mode is available.
 |----------|-------------|
 | Binance  | limit |
 | Binance Futures  | market, limit |
-| Bingx  | market, limit |
-| HTX (former Huobi)    | limit |
+| Bingx    | market, limit |
+| Bitget   | market, limit |
+| HTX      | limit |
 | kraken   | market, limit |
 | Gate     | limit |
 | Okx      | limit |
 | Kucoin   | stop-limit, stop-market|
+| Hyperliquid (futures only)   | limit |
 
 !!! Note "Tight stoploss"
     <ins>Do not set too low/tight stoploss value when using stop loss on exchange!</ins>  
@@ -153,10 +155,10 @@ For example, simplified math:
 
 In summary: The stoploss will be adjusted to be always be -10% of the highest observed price.
 
-### Trailing stop loss, custom positive loss
+### Trailing stop loss, different positive loss
 
-You could also have a default stop loss when you are in the red with your buy (buy - fee), but once you hit a positive result (or an offset you define) the system will utilize a new stop loss, which can have a different value.
-For example, your default stop loss is -10%, but once you have more than 0% profit (example 0.1%) a different trailing stoploss will be used.
+You could also have a default stop loss when you are in the red with your buy (buy - fee), but once you hit a positive result (or an offset you define) the system will utilize a new stop loss, with a different value.
+For example, your default stop loss is -10%, but once you have reached profitability (example 0.1%) a different trailing stoploss will be used.
 
 !!! Note
     If you want the stoploss to only be changed when you break even of making a profit (what most users want) please refer to next section with [offset enabled](#trailing-stop-loss-only-once-the-trade-has-reached-a-certain-offset).
@@ -207,7 +209,9 @@ Before this, `stoploss` is used for the trailing stoploss.
 
 You can also keep a static stoploss until the offset is reached, and then trail the trade to take profits once the market turns.
 
-If `trailing_only_offset_is_reached = True` then the trailing stoploss is only activated once the offset is reached. Until then, the stoploss remains at the configured `stoploss`.
+If `trailing_only_offset_is_reached = True` then the trailing stoploss is only activated once the offset is reached. Until then, the stoploss remains at the configured `stoploss` and is not trailing.
+Leaving this value as `trailing_only_offset_is_reached=False` will allow the trailing stoploss to start trailing as soon as the asset price increases above the initial entry price.
+
 This option can be used with or without `trailing_stop_positive`, but uses `trailing_stop_positive_offset` as offset.
 
 Configuration (offset is buy-price + 3%):
@@ -253,4 +257,4 @@ The new stoploss value will be applied to open trades (and corresponding log-mes
 
 ### Limitations
 
-Stoploss values cannot be changed if `trailing_stop` is enabled and the stoploss has already been adjusted, or if [Edge](edge.md) is enabled (since Edge would recalculate stoploss based on the current market situation).
+Stoploss values cannot be changed if `trailing_stop` is enabled and the stoploss has already been adjusted.

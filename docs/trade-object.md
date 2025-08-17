@@ -18,13 +18,14 @@ The following attributes / properties are available for each individual trade - 
 | `open_rate` | float | Rate this trade was entered at (Avg. entry rate in case of trade-adjustments). |
 | `close_rate` | float | Close rate - only set when is_open = False. |
 | `stake_amount` | float | Amount in Stake (or Quote) currency. |
-| `amount` | float | Amount in Asset / Base currency that is currently owned. |
+| `amount` | float | Amount in Asset / Base currency that is currently owned. Will be 0.0 until the initial order fills. |
 | `open_date` | datetime | Timestamp when trade was opened **use `open_date_utc` instead** |
 | `open_date_utc` | datetime | Timestamp when trade was opened - in UTC. |
 | `close_date` | datetime | Timestamp when trade was closed **use `close_date_utc` instead** |
 | `close_date_utc` | datetime | Timestamp when trade was closed - in UTC. |
 | `close_profit` | float | Relative profit at the time of trade closure. `0.01` == 1% |
 | `close_profit_abs` | float | Absolute profit (in stake currency) at the time of trade closure. |
+| `realized_profit` | float | Absolute already realized profit (in stake currency) while the trade is still open. |
 | `leverage` | float | Leverage used for this trade - defaults to 1.0 in spot markets. |
 | `enter_tag` | string | Tag provided on entry via the `enter_tag` column in the dataframe. |
 | `is_short` | boolean | True for short trades, False otherwise. |
@@ -35,6 +36,7 @@ The following attributes / properties are available for each individual trade - 
 | `trade_direction` | "long" / "short" | Trade direction in text - long or short. |
 | `nr_of_successful_entries` | int | Number of successful (filled) entry orders. |
 | `nr_of_successful_exits` | int | Number of successful (filled) exit orders. |
+| `has_open_orders` | boolean | Has the trade open orders (excluding stoploss orders). |
 
 ## Class methods
 
@@ -130,20 +132,23 @@ Most properties here can be None as they are dependent on the exchange response.
 
 |  Attribute | DataType | Description |
 |------------|-------------|-------------|
-`trade` | Trade | Trade object this order is attached to
-`ft_pair` | string | Pair this order is for
-`ft_is_open` | boolean | is the order filled?
-`order_type` | string | Order type as defined on the exchange - usually market, limit or stoploss
-`status` | string | Status as defined by ccxt. Usually open, closed, expired or canceled
-`side` | string | Buy or Sell
-`price` | float | Price the order was placed at
-`average` | float | Average price the order filled at
-`amount` | float | Amount in base currency
-`filled` | float | Filled amount (in base currency)
-`remaining` | float | Remaining amount
-`cost` | float | Cost of the order - usually average * filled (*Exchange dependent on futures, may contain the cost with or without leverage and may be in contracts.*)
-`stake_amount` | float | Stake amount used for this order. *Added in 2023.7.*
-`order_date` | datetime | Order creation date **use `order_date_utc` instead**
-`order_date_utc` | datetime | Order creation date (in UTC)
-`order_fill_date` | datetime |  Order fill date **use `order_fill_utc` instead**
-`order_fill_date_utc` | datetime | Order fill date
+| `trade` | Trade | Trade object this order is attached to |
+| `ft_pair` | string | Pair this order is for |
+| `ft_is_open` | boolean | is the order still open? |
+| `order_type` | string | Order type as defined on the exchange - usually market, limit or stoploss |
+| `status` | string | Status as defined by [ccxt's order structure](https://docs.ccxt.com/#/README?id=order-structure). Usually open, closed, expired, canceled or rejected |
+| `side` | string | buy or sell |
+| `price` | float | Price the order was placed at |
+| `average` | float | Average price the order filled at |
+| `amount` | float | Amount in base currency |
+| `filled` | float | Filled amount (in base currency) (use `safe_filled` instead) |
+| `safe_filled` | float | Filled amount (in base currency) - guaranteed to not be None |
+| `remaining` | float | Remaining amount (use `safe_remaining` instead) |
+| `safe_remaining` | float | Remaining amount - either taken from the exchange or calculated. |
+| `cost` | float | Cost of the order - usually average * filled (*Exchange dependent on futures, may contain the cost with or without leverage and may be in contracts.*) |
+| `stake_amount` | float | Stake amount used for this order. *Added in 2023.7.* |
+| `stake_amount_filled` | float | Filled Stake amount used for this order. *Added in 2024.11.* |
+| `order_date` | datetime | Order creation date **use `order_date_utc` instead** |
+| `order_date_utc` | datetime | Order creation date (in UTC) |
+| `order_fill_date` | datetime |  Order fill date **use `order_fill_utc` instead** |
+| `order_fill_date_utc` | datetime | Order fill date |

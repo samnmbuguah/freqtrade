@@ -5,8 +5,9 @@ Main Freqtrade worker class.
 import logging
 import time
 import traceback
+from collections.abc import Callable
 from os import getpid
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 import sdnotify
 
@@ -27,7 +28,7 @@ class Worker:
     Freqtradebot worker class
     """
 
-    def __init__(self, args: Dict[str, Any], config: Optional[Config] = None) -> None:
+    def __init__(self, args: dict[str, Any], config: Config | None = None) -> None:
         """
         Init all variables and objects the bot needs to work
         """
@@ -79,7 +80,7 @@ class Worker:
             if state == State.RELOAD_CONFIG:
                 self._reconfigure()
 
-    def _worker(self, old_state: Optional[State]) -> State:
+    def _worker(self, old_state: State | None) -> State:
         """
         The main routine that runs each throttling iteration and handles the states.
         :param old_state: the previous service state from the previous call
@@ -95,7 +96,10 @@ class Worker:
             logger.info(
                 f"Changing state{f' from {old_state.name}' if old_state else ''} to: {state.name}"
             )
-            if state == State.RUNNING:
+            if state in (State.RUNNING, State.PAUSED) and old_state not in (
+                State.RUNNING,
+                State.PAUSED,
+            ):
                 self.freqtrade.startup()
 
             if state == State.STOPPED:
@@ -111,9 +115,10 @@ class Worker:
 
             self._throttle(func=self._process_stopped, throttle_secs=self._throttle_secs)
 
-        elif state == State.RUNNING:
+        elif state in (State.RUNNING, State.PAUSED):
+            state_str = "RUNNING" if state == State.RUNNING else "PAUSED"
             # Ping systemd watchdog before throttling
-            self._notify("WATCHDOG=1\nSTATUS=State: RUNNING.")
+            self._notify(f"WATCHDOG=1\nSTATUS=State: {state_str}.")
 
             # Use an offset of 1s to ensure a new candle has been issued
             self._throttle(
@@ -141,7 +146,7 @@ class Worker:
         self,
         func: Callable[..., Any],
         throttle_secs: float,
-        timeframe: Optional[str] = None,
+        timeframe: str | None = None,
         timeframe_offset: float = 1.0,
         *args,
         **kwargs,
@@ -220,7 +225,7 @@ class Worker:
         # Load and validate config and create new instance of the bot
         self._init(True)
 
-        self.freqtrade.notify_status("config reloaded")
+        self.freqtrade.notify_status(f"{State(self.freqtrade.state)} after config reloaded")
 
         # Tell systemd that we completed reconfiguration
         self._notify("READY=1")

@@ -4,7 +4,7 @@
 bot constants
 """
 
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 from freqtrade.enums import CandleType, PriceType
 
@@ -37,7 +37,9 @@ HYPEROPT_LOSS_BUILTIN = [
     "CalmarHyperOptLoss",
     "MaxDrawDownHyperOptLoss",
     "MaxDrawDownRelativeHyperOptLoss",
+    "MaxDrawDownPerPairHyperOptLoss",
     "ProfitDrawDownHyperOptLoss",
+    "MultiMetricHyperOptLoss",
 ]
 AVAILABLE_PAIRLISTS = [
     "StaticPairList",
@@ -57,9 +59,8 @@ AVAILABLE_PAIRLISTS = [
     "SpreadFilter",
     "VolatilityFilter",
 ]
-AVAILABLE_PROTECTIONS = ["CooldownPeriod", "LowProfitPairs", "MaxDrawdown", "StoplossGuard"]
-AVAILABLE_DATAHANDLERS = ["json", "jsongz", "hdf5", "feather", "parquet"]
-BACKTEST_BREAKDOWNS = ["day", "week", "month"]
+AVAILABLE_DATAHANDLERS = ["json", "jsongz", "feather", "parquet"]
+BACKTEST_BREAKDOWNS = ["day", "week", "month", "year"]
 BACKTEST_CACHE_AGE = ["none", "day", "week", "month"]
 BACKTEST_CACHE_DEFAULT = "day"
 DRY_RUN_WALLET = 1000
@@ -70,6 +71,19 @@ DEFAULT_DATAFRAME_COLUMNS = ["date", "open", "high", "low", "close", "volume"]
 # it has wide consequences for stored trades files
 DEFAULT_TRADES_COLUMNS = ["timestamp", "id", "type", "side", "price", "amount", "cost"]
 DEFAULT_ORDERFLOW_COLUMNS = ["level", "bid", "ask", "delta"]
+ORDERFLOW_ADDED_COLUMNS = [
+    "trades",
+    "orderflow",
+    "imbalances",
+    "stacked_imbalances_bid",
+    "stacked_imbalances_ask",
+    "max_delta",
+    "min_delta",
+    "bid",
+    "ask",
+    "delta",
+    "total_trades",
+]
 TRADES_DTYPES = {
     "timestamp": "int64",
     "id": "str",
@@ -98,8 +112,8 @@ DL_DATA_TIMEFRAMES = ["1m", "5m"]
 
 ENV_VAR_PREFIX = "FREQTRADE__"
 
-CANCELED_EXCHANGE_STATES = ("cancelled", "canceled", "expired")
-NON_OPEN_EXCHANGE_STATES = CANCELED_EXCHANGE_STATES + ("closed",)
+CANCELED_EXCHANGE_STATES = ("cancelled", "canceled", "expired", "rejected")
+NON_OPEN_EXCHANGE_STATES = (*CANCELED_EXCHANGE_STATES, "closed")
 
 # Define decimals per coin for outputs
 # Only used for outputs.
@@ -188,14 +202,14 @@ CANCEL_REASON = {
 }
 
 # List of pairs with their timeframes
-PairWithTimeframe = Tuple[str, str, CandleType]
-ListPairsWithTimeframes = List[PairWithTimeframe]
+PairWithTimeframe = tuple[str, str, CandleType]
+ListPairsWithTimeframes = list[PairWithTimeframe]
 
 # Type for trades list
-TradeList = List[List]
+TradeList = list[list]
 # ticks, pair, timeframe, CandleType
-TickWithTimeframe = Tuple[str, str, CandleType, Optional[int], Optional[int]]
-ListTicksWithTimeframes = List[TickWithTimeframe]
+TickWithTimeframe = tuple[str, str, CandleType, int | None, int | None]
+ListTicksWithTimeframes = list[TickWithTimeframe]
 
 LongShort = Literal["long", "short"]
 EntryExit = Literal["entry", "exit"]
@@ -204,9 +218,9 @@ MakerTaker = Literal["maker", "taker"]
 BidAsk = Literal["bid", "ask"]
 OBLiteral = Literal["asks", "bids"]
 
-Config = Dict[str, Any]
+Config = dict[str, Any]
 # Exchange part of the configuration.
-ExchangeConfig = Dict[str, Any]
+ExchangeConfig = dict[str, Any]
 IntOrInf = float
 
 

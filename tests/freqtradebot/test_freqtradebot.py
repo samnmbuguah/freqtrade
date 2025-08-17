@@ -5,7 +5,6 @@ import logging
 import time
 from copy import deepcopy
 from datetime import timedelta
-from typing import List
 from unittest.mock import ANY, MagicMock, PropertyMock, patch
 
 import pytest
@@ -44,7 +43,6 @@ from tests.conftest import (
     get_patched_worker,
     log_has,
     log_has_re,
-    patch_edge,
     patch_exchange,
     patch_get_signal,
     patch_wallet,
@@ -254,92 +252,6 @@ def test_check_available_stake_amount(
                 freqtrade.wallets.get_trade_stake_amount("ETH/USDT", 1)
 
 
-def test_edge_called_in_process(mocker, edge_conf) -> None:
-    patch_RPCManager(mocker)
-    patch_edge(mocker)
-
-    patch_exchange(mocker)
-    freqtrade = FreqtradeBot(edge_conf)
-    patch_get_signal(freqtrade)
-    freqtrade.process()
-    assert freqtrade.active_pair_whitelist == ["NEO/BTC", "LTC/BTC"]
-
-
-def test_edge_overrides_stake_amount(mocker, edge_conf) -> None:
-    patch_RPCManager(mocker)
-    patch_exchange(mocker)
-    patch_edge(mocker)
-    edge_conf["dry_run_wallet"] = 999.9
-    freqtrade = FreqtradeBot(edge_conf)
-
-    assert (
-        freqtrade.wallets.get_trade_stake_amount("NEO/BTC", 1, freqtrade.edge)
-        == (999.9 * 0.5 * 0.01) / 0.20
-    )
-    assert (
-        freqtrade.wallets.get_trade_stake_amount("LTC/BTC", 1, freqtrade.edge)
-        == (999.9 * 0.5 * 0.01) / 0.21
-    )
-
-
-@pytest.mark.parametrize(
-    "buy_price_mult,ignore_strat_sl",
-    [
-        (0.79, False),  # Override stoploss
-        (0.85, True),  # Override strategy stoploss
-    ],
-)
-def test_edge_overrides_stoploss(
-    limit_order, fee, caplog, mocker, buy_price_mult, ignore_strat_sl, edge_conf
-) -> None:
-    patch_RPCManager(mocker)
-    patch_exchange(mocker)
-    patch_edge(mocker)
-    edge_conf["max_open_trades"] = float("inf")
-
-    # Strategy stoploss is -0.1 but Edge imposes a stoploss at -0.2
-    # Thus, if price falls 21%, stoploss should be triggered
-    #
-    # mocking the ticker: price is falling ...
-    enter_price = limit_order["buy"]["price"]
-    ticker_val = {
-        "bid": enter_price,
-        "ask": enter_price,
-        "last": enter_price,
-    }
-    mocker.patch.multiple(
-        EXMS,
-        fetch_ticker=MagicMock(return_value=ticker_val),
-        get_fee=fee,
-    )
-    #############################################
-
-    # Create a trade with "limit_buy_order_usdt" price
-    freqtrade = FreqtradeBot(edge_conf)
-    freqtrade.active_pair_whitelist = ["NEO/BTC"]
-    patch_get_signal(freqtrade)
-    freqtrade.strategy.min_roi_reached = MagicMock(return_value=False)
-    freqtrade.enter_positions()
-    trade = Trade.session.scalars(select(Trade)).first()
-    caplog.clear()
-    #############################################
-    ticker_val.update(
-        {
-            "bid": enter_price * buy_price_mult,
-            "ask": enter_price * buy_price_mult,
-            "last": enter_price * buy_price_mult,
-        }
-    )
-
-    # stoploss should be hit
-    assert freqtrade.handle_trade(trade) is not ignore_strat_sl
-    if not ignore_strat_sl:
-        assert log_has_re("Exit for NEO/BTC detected. Reason: stop_loss.*", caplog)
-        assert trade.exit_reason == ExitType.STOP_LOSS.value
-        # Test compatibility ...
-        assert trade.sell_reason == ExitType.STOP_LOSS.value
-
-
 def test_total_open_trades_stakes(mocker, default_conf_usdt, ticker_usdt, fee) -> None:
     patch_RPCManager(mocker)
     patch_exchange(mocker)
@@ -375,7 +287,7 @@ def test_total_open_trades_stakes(mocker, default_conf_usdt, ticker_usdt, fee) -
 def test_create_trade(
     default_conf_usdt, ticker_usdt, limit_order, fee, mocker, is_short, open_rate
 ) -> None:
-    patch_RPCManager(mocker)
+    send_msg_mock = patch_RPCManager(mocker)
     patch_exchange(mocker)
     mocker.patch.multiple(
         EXMS,
@@ -388,6 +300,7 @@ def test_create_trade(
     whitelist = deepcopy(default_conf_usdt["exchange"]["pair_whitelist"])
     freqtrade = FreqtradeBot(default_conf_usdt)
     patch_get_signal(freqtrade, enter_short=is_short, enter_long=not is_short)
+    send_msg_mock.reset_mock()
     freqtrade.create_trade("ETH/USDT")
 
     trade = Trade.session.scalars(select(Trade)).first()
@@ -403,6 +316,14 @@ def test_create_trade(
         limit_order[entry_side(is_short)], "ADA/USDT", entry_side(is_short)
     )
     trade.update_trade(oobj)
+    assert send_msg_mock.call_count == 1
+    entry_msg = send_msg_mock.call_args_list[0][0][0]
+    assert entry_msg["type"] == RPCMessageType.ENTRY
+    assert entry_msg["stake_amount"] == trade.stake_amount
+    assert entry_msg["stake_currency"] == default_conf_usdt["stake_currency"]
+    assert entry_msg["pair"] == "ETH/USDT"
+    assert entry_msg["direction"] == ("Short" if is_short else "Long")
+    assert entry_msg["sub_trade"] is False
 
     assert trade.open_rate == open_rate
     assert trade.amount == 30.0
@@ -475,7 +396,7 @@ def test_create_trade_minimal_amount(
         if not max_open_trades:
             assert (
                 freqtrade.wallets.get_trade_stake_amount(
-                    "ETH/USDT", default_conf_usdt["max_open_trades"], freqtrade.edge
+                    "ETH/USDT", default_conf_usdt["max_open_trades"]
                 )
                 == 0
             )
@@ -553,7 +474,7 @@ def test_enter_positions_global_pairlock(
 
 @pytest.mark.parametrize("is_short", [False, True])
 def test_handle_protections(mocker, default_conf_usdt, fee, is_short):
-    default_conf_usdt["protections"] = [
+    default_conf_usdt["_strategy_protections"] = [
         {"method": "CooldownPeriod", "stop_duration": 60},
         {
             "method": "StoplossGuard",
@@ -689,13 +610,29 @@ def test_process_trade_creation(
     assert trade.open_date is not None
     assert trade.exchange == "binance"
     assert trade.open_rate == ticker_usdt.return_value[ticker_side]
-    assert pytest.approx(trade.amount) == 60 / ticker_usdt.return_value[ticker_side]
+    # Trade opens with 0 amount. Only trade filling will set the amount
+    assert pytest.approx(trade.amount) == 0
+    assert pytest.approx(trade.amount_requested) == 60 / ticker_usdt.return_value[ticker_side]
 
-    assert log_has(
-        f'{"Short" if is_short else "Long"} signal found: about create a new trade for ETH/USDT '
-        "with stake_amount: 60.0 ...",
+    assert log_has_re(
+        f"{'Short' if is_short else 'Long'} signal found: about create a new trade for ETH/USDT "
+        r"with stake_amount: 60.0 and price: .*",
         caplog,
     )
+    mocker.patch("freqtrade.freqtradebot.FreqtradeBot._check_and_execute_exit")
+
+    # Fill trade.
+    freqtrade.process()
+    trades = Trade.get_open_trades()
+    assert len(trades) == 1
+    trade = trades[0]
+    assert trade is not None
+    assert trade.is_open
+    assert trade.open_date is not None
+    assert trade.exchange == "binance"
+    assert trade.open_rate == limit_order[entry_side(is_short)]["price"]
+    # Filled trade has amount set to filled order amount
+    assert pytest.approx(trade.amount) == limit_order[entry_side(is_short)]["filled"]
 
 
 def test_process_exchange_failures(default_conf_usdt, ticker_usdt, mocker) -> None:
@@ -1265,14 +1202,14 @@ def test_exit_positions(mocker, default_conf_usdt, limit_order, is_short, caplog
     trades = [trade]
     freqtrade.wallets.update()
     n = freqtrade.exit_positions(trades)
-    assert n == 0
+    assert n == 1
     # Test amount not modified by fee-logic
     assert not log_has_re(r"Applying fee to amount for Trade .*", caplog)
 
     gra = mocker.patch("freqtrade.freqtradebot.FreqtradeBot.get_real_amount", return_value=0.0)
     # test amount modified by fee-logic
     n = freqtrade.exit_positions(trades)
-    assert n == 0
+    assert n == 1
     assert gra.call_count == 0
 
 
@@ -1305,6 +1242,7 @@ def test_exit_positions_exception(mocker, default_conf_usdt, limit_order, caplog
             ft_price=trade.open_rate,
             order_id=order_id,
             ft_is_open=False,
+            filled=11,
         )
     )
     Trade.session.add(trade)
@@ -1684,7 +1622,7 @@ def test_handle_trade_roi(
         create_order=MagicMock(
             side_effect=[
                 open_order,
-                {"id": 1234553382},
+                {"id": 1234553382, "amount": open_order["amount"]},
             ]
         ),
         get_fee=fee,
@@ -2029,7 +1967,7 @@ def test_adjust_entry_replace_fail(
     assert len(trades) == 0
     assert len(Order.session.scalars(select(Order)).all()) == 0
     assert fetch_order_mock.call_count == 4
-    assert log_has_re(r"Could not cancel order.*, therefore not replacing\.", caplog)
+    assert log_has_re(r"Could not fully cancel order.*, therefore not replacing\.", caplog)
 
     # Entry adjustment is called
     assert freqtrade.strategy.adjust_entry_price.call_count == 1
@@ -2204,7 +2142,6 @@ def test_manage_open_orders_buy_exception(
     patch_exchange(mocker)
     mocker.patch.multiple(
         EXMS,
-        validate_pairs=MagicMock(),
         fetch_ticker=ticker_usdt,
         fetch_order=MagicMock(side_effect=ExchangeError),
         cancel_order=cancel_order_mock,
@@ -2883,7 +2820,7 @@ def test_execute_trade_exit_up(
         EXMS,
         fetch_ticker=ticker_usdt,
         get_fee=fee,
-        _dry_is_price_crossed=MagicMock(return_value=False),
+        _dry_is_price_crossed=MagicMock(side_effect=[True, False]),
     )
     patch_whitelist(mocker, default_conf_usdt)
     freqtrade = FreqtradeBot(default_conf_usdt)
@@ -2975,7 +2912,7 @@ def test_execute_trade_exit_down(
         EXMS,
         fetch_ticker=ticker_usdt,
         get_fee=fee,
-        _dry_is_price_crossed=MagicMock(return_value=False),
+        _dry_is_price_crossed=MagicMock(side_effect=[True, False]),
     )
     patch_whitelist(mocker, default_conf_usdt)
     freqtrade = FreqtradeBot(default_conf_usdt)
@@ -2998,7 +2935,7 @@ def test_execute_trade_exit_down(
         exit_check=ExitCheckTuple(exit_type=ExitType.STOP_LOSS),
     )
 
-    assert rpc_mock.call_count == 2
+    assert rpc_mock.call_count == 3
     last_msg = rpc_mock.call_args_list[-1][0][0]
     assert {
         "type": RPCMessageType.EXIT,
@@ -3062,7 +2999,7 @@ def test_execute_trade_exit_custom_exit_price(
         EXMS,
         fetch_ticker=ticker_usdt,
         get_fee=fee,
-        _dry_is_price_crossed=MagicMock(return_value=False),
+        _dry_is_price_crossed=MagicMock(side_effect=[True, False]),
     )
     config = deepcopy(default_conf_usdt)
     config["custom_price_max_distance_ratio"] = 0.1
@@ -3469,16 +3406,17 @@ def test_locked_pairs(
         exit_check=ExitCheckTuple(exit_type=ExitType.STOP_LOSS),
     )
     trade.close(ticker_usdt_sell_down()["bid"])
-    assert freqtrade.strategy.is_pair_locked(trade.pair, side="*")
+    assert not freqtrade.strategy.is_pair_locked(trade.pair, side="*")
     # Both sides are locked
-    assert freqtrade.strategy.is_pair_locked(trade.pair, side="long")
-    assert freqtrade.strategy.is_pair_locked(trade.pair, side="short")
+    assert freqtrade.strategy.is_pair_locked(trade.pair, side="long") != is_short
+    assert freqtrade.strategy.is_pair_locked(trade.pair, side="short") == is_short
 
     # reinit - should buy other pair.
     caplog.clear()
     freqtrade.enter_positions()
+    direction = "short" if is_short else "long"
 
-    assert log_has_re(rf"Pair {trade.pair} \* is locked.*", caplog)
+    assert log_has_re(rf"Pair {trade.pair} {direction} is locked.*", caplog)
 
 
 @pytest.mark.parametrize("is_short", [False, True])
@@ -3718,8 +3656,9 @@ def test_trailing_stop_loss_positive(
 
 @pytest.mark.parametrize("is_short", [False, True])
 def test_disable_ignore_roi_if_entry_signal(
-    default_conf_usdt, limit_order, limit_order_open, is_short, fee, mocker
+    default_conf_usdt, limit_order, limit_order_open, is_short, fee, mocker, time_machine
 ) -> None:
+    time_machine.move_to("2025-01-10 08:00:16 +00:00")
     patch_RPCManager(mocker)
     patch_exchange(mocker)
     eside = entry_side(is_short)
@@ -3748,6 +3687,13 @@ def test_disable_ignore_roi_if_entry_signal(
     patch_get_signal(freqtrade, enter_long=not is_short, enter_short=is_short, exit_short=is_short)
     assert freqtrade.handle_trade(trade) is True
 
+    # Test if entry-signal is absent
+    patch_get_signal(freqtrade)
+    # Signal was evaluated already - no action.
+    assert freqtrade.handle_trade(trade) is False
+
+    # Move to after the candle expired
+    time_machine.shift(timedelta(hours=5))
     # Test if entry-signal is absent
     patch_get_signal(freqtrade)
     assert freqtrade.handle_trade(trade) is True
@@ -3830,7 +3776,7 @@ def test_get_real_amount_no_trade(default_conf_usdt, buy_order_fee, caplog, mock
     assert log_has(
         "Applying fee on amount for Trade(id=None, pair=LTC/ETH, amount=8.00000000, "
         "is_short=False, leverage=1.0, open_rate=0.24544100, open_since=closed) failed: "
-        "myTrade-Dict empty found",
+        "myTrade-dict empty found",
         caplog,
     )
 
@@ -3956,7 +3902,7 @@ def test_get_real_amount_multi(
     markets["BNB/ETH"] = markets["ETH/USDT"]
     freqtrade = get_patched_freqtradebot(mocker, default_conf_usdt)
     mocker.patch(f"{EXMS}.markets", PropertyMock(return_value=markets))
-    mocker.patch(f"{EXMS}.fetch_ticker", return_value={"ask": 0.19, "last": 0.2})
+    mocker.patch(f"{EXMS}.get_conversion_rate", return_value=0.2)
 
     # Amount is reduced by "fee"
     expected_amount = amount * fee_reduction_amount
@@ -4006,7 +3952,7 @@ def test_get_real_amount_fees_order(
     default_conf_usdt, market_buy_order_usdt_doublefee, fee, mocker
 ):
     tfo_mock = mocker.patch(f"{EXMS}.get_trades_for_order", return_value=[])
-    mocker.patch(f"{EXMS}.get_valid_pair_combination", return_value="BNB/USDT")
+    mocker.patch(f"{EXMS}.get_valid_pair_combination", return_value=["BNB/USDT"])
     mocker.patch(f"{EXMS}.fetch_ticker", return_value={"last": 200})
     trade = Trade(
         pair="LTC/USDT",
@@ -4446,7 +4392,7 @@ def test_startup_state(default_conf_usdt, mocker):
     assert worker.freqtrade.state is State.RUNNING
 
 
-def test_startup_trade_reinit(default_conf_usdt, edge_conf, mocker):
+def test_startup_trade_reinit(default_conf_usdt, mocker):
     mocker.patch(f"{EXMS}.exchange_has", MagicMock(return_value=True))
     reinit_mock = MagicMock()
     mocker.patch("freqtrade.persistence.Trade.stoploss_reinitialization", reinit_mock)
@@ -4454,12 +4400,6 @@ def test_startup_trade_reinit(default_conf_usdt, edge_conf, mocker):
     ftbot = get_patched_freqtradebot(mocker, default_conf_usdt)
     ftbot.startup()
     assert reinit_mock.call_count == 1
-
-    reinit_mock.reset_mock()
-
-    ftbot = get_patched_freqtradebot(mocker, edge_conf)
-    ftbot.startup()
-    assert reinit_mock.call_count == 0
 
 
 @pytest.mark.usefixtures("init_persistence")
@@ -5175,6 +5115,13 @@ def test_update_funding_fees(
     open_exit_order = limit_order_open[exit_side(is_short)]
     bid = 0.11
     enter_rate_mock = MagicMock(return_value=bid)
+    open_order.update(
+        {
+            "status": "closed",
+            "filled": open_order["amount"],
+            "remaining": 0,
+        }
+    )
     enter_mm = MagicMock(return_value=open_order)
     patch_RPCManager(mocker)
     patch_exchange(mocker)
@@ -5427,7 +5374,7 @@ def test_position_adjust(mocker, default_conf_usdt, fee) -> None:
     assert trade.amount == 10
     assert trade.stake_amount == 110
     assert not trade.fee_updated("buy")
-    trades: List[Trade] = Trade.get_open_trades_without_assigned_fees()
+    trades: list[Trade] = Trade.get_open_trades_without_assigned_fees()
     assert len(trades) == 1
     assert trade.is_open
     assert not trade.fee_updated("buy")
@@ -5453,7 +5400,7 @@ def test_position_adjust(mocker, default_conf_usdt, fee) -> None:
     assert orders
     assert len(orders) == 2
     # Assert that the trade is found as open and without fees
-    trades: List[Trade] = Trade.get_open_trades_without_assigned_fees()
+    trades: list[Trade] = Trade.get_open_trades_without_assigned_fees()
     assert len(trades) == 1
     # Assert trade is as expected
     trade = Trade.session.scalars(select(Trade)).first()
@@ -5510,7 +5457,7 @@ def test_position_adjust(mocker, default_conf_usdt, fee) -> None:
     assert order.order_id == "651"
 
     # Assert that the trade is not found as open and without fees
-    trades: List[Trade] = Trade.get_open_trades_without_assigned_fees()
+    trades: list[Trade] = Trade.get_open_trades_without_assigned_fees()
     assert len(trades) == 1
 
     # Add a second DCA
@@ -5710,7 +5657,7 @@ def test_position_adjust2(mocker, default_conf_usdt, fee) -> None:
         exit_check=ExitCheckTuple(exit_type=ExitType.PARTIAL_EXIT),
         sub_trade_amt=amount,
     )
-    trades: List[Trade] = trade.get_open_trades_without_assigned_fees()
+    trades: list[Trade] = trade.get_open_trades_without_assigned_fees()
     assert len(trades) == 1
     # Assert trade is as expected (averaged dca)
 
@@ -5926,13 +5873,13 @@ def test_check_and_call_adjust_trade_position(mocker, default_conf_usdt, fee, ca
     freqtrade.strategy.adjust_trade_position = MagicMock(return_value=(10, "aaaa"))
     freqtrade.process_open_trade_positions()
     assert log_has_re(r"Max adjustment entries for .* has been reached\.", caplog)
-    assert freqtrade.strategy.adjust_trade_position.call_count == 1
+    assert freqtrade.strategy.adjust_trade_position.call_count == 4
 
     caplog.clear()
     freqtrade.strategy.adjust_trade_position = MagicMock(return_value=(-0.0005, "partial_exit_c"))
     freqtrade.process_open_trade_positions()
     assert log_has_re(r"LIMIT_SELL has been fulfilled.*", caplog)
-    assert freqtrade.strategy.adjust_trade_position.call_count == 1
+    assert freqtrade.strategy.adjust_trade_position.call_count == 4
     trade = Trade.get_trades(trade_filter=[Trade.id == 5]).first()
     assert trade.orders[-1].ft_order_tag == "partial_exit_c"
     assert trade.is_open

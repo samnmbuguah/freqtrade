@@ -2,18 +2,11 @@
 
 import re
 import shutil
-import sys
 from pathlib import Path
-
-import pytest
 
 from freqtrade.commands.strategy_utils_commands import start_strategy_update
 from freqtrade.strategy.strategyupdater import StrategyUpdater
 from tests.conftest import get_args
-
-
-if sys.version_info < (3, 9):
-    pytest.skip("StrategyUpdater is not compatible with Python 3.8", allow_module_level=True)
 
 
 def test_strategy_updater_start(user_dir, capsys) -> None:
@@ -49,8 +42,10 @@ def test_strategy_updater_methods(default_conf, caplog) -> None:
     instance_strategy_updater = StrategyUpdater()
     modified_code1 = instance_strategy_updater.update_code(
         """
+import numpy as np
 class testClass(IStrategy):
     def populate_buy_trend():
+        some_variable = np.NaN
         pass
     def populate_sell_trend():
         pass
@@ -69,6 +64,7 @@ class testClass(IStrategy):
     assert "check_exit_timeout" in modified_code1
     assert "custom_exit" in modified_code1
     assert "INTERFACE_VERSION = 3" in modified_code1
+    assert "np.nan" in modified_code1
 
 
 def test_strategy_updater_params(default_conf, caplog) -> None:

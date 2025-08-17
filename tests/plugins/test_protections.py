@@ -1,14 +1,17 @@
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from freqtrade import constants
 from freqtrade.enums import ExitType
+from freqtrade.exceptions import OperationalException
 from freqtrade.persistence import PairLocks, Trade
 from freqtrade.persistence.trade_model import Order
 from freqtrade.plugins.protectionmanager import ProtectionManager
 from tests.conftest import get_patched_freqtradebot, log_has_re
+
+
+AVAILABLE_PROTECTIONS = ["CooldownPeriod", "LowProfitPairs", "MaxDrawdown", "StoplossGuard"]
 
 
 def generate_mock_trade(
@@ -16,8 +19,8 @@ def generate_mock_trade(
     fee: float,
     is_open: bool,
     exit_reason: str = ExitType.EXIT_SIGNAL,
-    min_ago_open: int = None,
-    min_ago_close: int = None,
+    min_ago_open: int | None = None,
+    min_ago_close: int | None = None,
     profit_rate: float = 0.9,
     is_short: bool = False,
 ):
@@ -28,8 +31,8 @@ def generate_mock_trade(
         stake_amount=0.01,
         fee_open=fee,
         fee_close=fee,
-        open_date=datetime.now(timezone.utc) - timedelta(minutes=min_ago_open or 200),
-        close_date=datetime.now(timezone.utc) - timedelta(minutes=min_ago_close or 30),
+        open_date=datetime.now(UTC) - timedelta(minutes=min_ago_open or 200),
+        close_date=datetime.now(UTC) - timedelta(minutes=min_ago_close or 30),
         open_rate=open_rate,
         is_open=is_open,
         amount=0.01 / open_rate,
@@ -88,17 +91,74 @@ def generate_mock_trade(
 
 
 def test_protectionmanager(mocker, default_conf):
-    default_conf["protections"] = [
-        {"method": protection} for protection in constants.AVAILABLE_PROTECTIONS
+    default_conf["_strategy_protections"] = [
+        {"method": protection} for protection in AVAILABLE_PROTECTIONS
     ]
     freqtrade = get_patched_freqtradebot(mocker, default_conf)
 
     for handler in freqtrade.protections._protection_handlers:
-        assert handler.name in constants.AVAILABLE_PROTECTIONS
+        assert handler.name in AVAILABLE_PROTECTIONS
         if not handler.has_global_stop:
-            assert handler.global_stop(datetime.now(timezone.utc), "*") is None
+            assert handler.global_stop(datetime.now(UTC), "*") is None
         if not handler.has_local_stop:
-            assert handler.stop_per_pair("XRP/BTC", datetime.now(timezone.utc), "*") is None
+            assert handler.stop_per_pair("XRP/BTC", datetime.now(UTC), "*") is None
+
+
+@pytest.mark.parametrize(
+    "protconf,expected",
+    [
+        ([], None),
+        ([{"method": "StoplossGuard", "lookback_period": 2000, "stop_duration_candles": 10}], None),
+        ([{"method": "StoplossGuard", "lookback_period_candles": 20, "stop_duration": 10}], None),
+        (
+            [
+                {
+                    "method": "StoplossGuard",
+                    "lookback_period_candles": 20,
+                    "lookback_period": 2000,
+                    "stop_duration": 10,
+                }
+            ],
+            r"Protections must specify either `lookback_period`.*",
+        ),
+        (
+            [
+                {
+                    "method": "StoplossGuard",
+                    "lookback_period": 20,
+                    "stop_duration": 10,
+                    "stop_duration_candles": 10,
+                }
+            ],
+            r"Protections must specify either `stop_duration`.*",
+        ),
+        (
+            [
+                {
+                    "method": "StoplossGuard",
+                    "lookback_period": 20,
+                    "stop_duration": 10,
+                    "unlock_at": "20:02",
+                }
+            ],
+            r"Protections must specify either `unlock_at`, `stop_duration` or.*",
+        ),
+        (
+            [{"method": "StoplossGuard", "lookback_period_candles": 20, "unlock_at": "20:02"}],
+            None,
+        ),
+        (
+            [{"method": "StoplossGuard", "lookback_period_candles": 20, "unlock_at": "55:102"}],
+            "Invalid date format for unlock_at: 55:102.",
+        ),
+    ],
+)
+def test_validate_protections(protconf, expected):
+    if expected:
+        with pytest.raises(OperationalException, match=expected):
+            ProtectionManager.validate_protections(protconf)
+    else:
+        ProtectionManager.validate_protections(protconf)
 
 
 @pytest.mark.parametrize(
@@ -196,7 +256,7 @@ def test_protections_init(default_conf, timeframe, expected_lookback, expected_s
 @pytest.mark.usefixtures("init_persistence")
 def test_stoploss_guard(mocker, default_conf, fee, caplog, is_short):
     # Active for both sides (long and short)
-    default_conf["protections"] = [
+    default_conf["_strategy_protections"] = [
         {"method": "StoplossGuard", "lookback_period": 60, "stop_duration": 40, "trade_limit": 3}
     ]
     freqtrade = get_patched_freqtradebot(mocker, default_conf)
@@ -268,7 +328,7 @@ def test_stoploss_guard(mocker, default_conf, fee, caplog, is_short):
 @pytest.mark.parametrize("only_per_side", [False, True])
 @pytest.mark.usefixtures("init_persistence")
 def test_stoploss_guard_perpair(mocker, default_conf, fee, caplog, only_per_pair, only_per_side):
-    default_conf["protections"] = [
+    default_conf["_strategy_protections"] = [
         {
             "method": "StoplossGuard",
             "lookback_period": 60,
@@ -379,7 +439,7 @@ def test_stoploss_guard_perpair(mocker, default_conf, fee, caplog, only_per_pair
 
 @pytest.mark.usefixtures("init_persistence")
 def test_CooldownPeriod(mocker, default_conf, fee, caplog):
-    default_conf["protections"] = [
+    default_conf["_strategy_protections"] = [
         {
             "method": "CooldownPeriod",
             "stop_duration": 60,
@@ -425,7 +485,7 @@ def test_CooldownPeriod(mocker, default_conf, fee, caplog):
 
 @pytest.mark.usefixtures("init_persistence")
 def test_CooldownPeriod_unlock_at(mocker, default_conf, fee, caplog, time_machine):
-    default_conf["protections"] = [
+    default_conf["_strategy_protections"] = [
         {
             "method": "CooldownPeriod",
             "unlock_at": "05:00",
@@ -439,7 +499,7 @@ def test_CooldownPeriod_unlock_at(mocker, default_conf, fee, caplog, time_machin
     assert not log_has_re(message, caplog)
     caplog.clear()
 
-    start_dt = datetime(2024, 5, 2, 0, 30, 0, tzinfo=timezone.utc)
+    start_dt = datetime(2024, 5, 2, 0, 30, 0, tzinfo=UTC)
     time_machine.move_to(start_dt, tick=False)
 
     generate_mock_trade(
@@ -467,7 +527,7 @@ def test_CooldownPeriod_unlock_at(mocker, default_conf, fee, caplog, time_machin
     assert not PairLocks.is_global_lock()
 
     # Force rollover to the next day.
-    start_dt = datetime(2024, 5, 2, 22, 00, 0, tzinfo=timezone.utc)
+    start_dt = datetime(2024, 5, 2, 22, 00, 0, tzinfo=UTC)
     time_machine.move_to(start_dt, tick=False)
     generate_mock_trade(
         "ETH/BTC",
@@ -509,7 +569,7 @@ def test_CooldownPeriod_unlock_at(mocker, default_conf, fee, caplog, time_machin
 @pytest.mark.parametrize("only_per_side", [False, True])
 @pytest.mark.usefixtures("init_persistence")
 def test_LowProfitPairs(mocker, default_conf, fee, caplog, only_per_side):
-    default_conf["protections"] = [
+    default_conf["_strategy_protections"] = [
         {
             "method": "LowProfitPairs",
             "lookback_period": 400,
@@ -599,7 +659,7 @@ def test_LowProfitPairs(mocker, default_conf, fee, caplog, only_per_side):
 
 @pytest.mark.usefixtures("init_persistence")
 def test_MaxDrawdown(mocker, default_conf, fee, caplog):
-    default_conf["protections"] = [
+    default_conf["_strategy_protections"] = [
         {
             "method": "MaxDrawdown",
             "lookback_period": 1000,
@@ -812,7 +872,7 @@ def test_MaxDrawdown(mocker, default_conf, fee, caplog):
 def test_protection_manager_desc(
     mocker, default_conf, protectionconf, desc_expected, exception_expected
 ):
-    default_conf["protections"] = [protectionconf]
+    default_conf["_strategy_protections"] = [protectionconf]
     freqtrade = get_patched_freqtradebot(mocker, default_conf)
 
     short_desc = str(freqtrade.protections.short_desc())

@@ -1,5 +1,6 @@
 # pragma pylint: disable=missing-docstring, protected-access, invalid-name
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from math import isnan, nan
 
 import pytest
 from ccxt import (
@@ -65,7 +66,7 @@ def test_check_exchange(default_conf, caplog) -> None:
     )
     caplog.clear()
     # Test an available exchange, supported by ccxt
-    default_conf.get("exchange").update({"name": "huobijp"})
+    default_conf.get("exchange").update({"name": "bittrade"})
     assert check_exchange(default_conf)
     assert log_has_re(
         r"Exchange .* is known to the ccxt library, available for the bot, "
@@ -116,7 +117,7 @@ def test_check_exchange(default_conf, caplog) -> None:
 
 
 def test_date_minus_candles():
-    date = datetime(2019, 8, 12, 13, 25, 0, tzinfo=timezone.utc)
+    date = datetime(2019, 8, 12, 13, 25, 0, tzinfo=UTC)
 
     assert date_minus_candles("5m", 3, date) == date - timedelta(minutes=15)
     assert date_minus_candles("5m", 5, date) == date - timedelta(minutes=25)
@@ -166,59 +167,59 @@ def test_timeframe_to_resample_freq(timeframe, expected):
 
 def test_timeframe_to_prev_date():
     # 2019-08-12 13:22:08
-    date = datetime.fromtimestamp(1565616128, tz=timezone.utc)
+    date = datetime.fromtimestamp(1565616128, tz=UTC)
 
     tf_list = [
         # 5m -> 2019-08-12 13:20:00
-        ("5m", datetime(2019, 8, 12, 13, 20, 0, tzinfo=timezone.utc)),
+        ("5m", datetime(2019, 8, 12, 13, 20, 0, tzinfo=UTC)),
         # 10m -> 2019-08-12 13:20:00
-        ("10m", datetime(2019, 8, 12, 13, 20, 0, tzinfo=timezone.utc)),
+        ("10m", datetime(2019, 8, 12, 13, 20, 0, tzinfo=UTC)),
         # 1h -> 2019-08-12 13:00:00
-        ("1h", datetime(2019, 8, 12, 13, 00, 0, tzinfo=timezone.utc)),
+        ("1h", datetime(2019, 8, 12, 13, 00, 0, tzinfo=UTC)),
         # 2h -> 2019-08-12 12:00:00
-        ("2h", datetime(2019, 8, 12, 12, 00, 0, tzinfo=timezone.utc)),
+        ("2h", datetime(2019, 8, 12, 12, 00, 0, tzinfo=UTC)),
         # 4h -> 2019-08-12 12:00:00
-        ("4h", datetime(2019, 8, 12, 12, 00, 0, tzinfo=timezone.utc)),
+        ("4h", datetime(2019, 8, 12, 12, 00, 0, tzinfo=UTC)),
         # 1d -> 2019-08-12 00:00:00
-        ("1d", datetime(2019, 8, 12, 00, 00, 0, tzinfo=timezone.utc)),
+        ("1d", datetime(2019, 8, 12, 00, 00, 0, tzinfo=UTC)),
     ]
     for interval, result in tf_list:
         assert timeframe_to_prev_date(interval, date) == result
 
-    date = datetime.now(tz=timezone.utc)
+    date = datetime.now(tz=UTC)
     assert timeframe_to_prev_date("5m") < date
     # Does not round
-    time = datetime(2019, 8, 12, 13, 20, 0, tzinfo=timezone.utc)
+    time = datetime(2019, 8, 12, 13, 20, 0, tzinfo=UTC)
     assert timeframe_to_prev_date("5m", time) == time
-    time = datetime(2019, 8, 12, 13, 0, 0, tzinfo=timezone.utc)
+    time = datetime(2019, 8, 12, 13, 0, 0, tzinfo=UTC)
     assert timeframe_to_prev_date("1h", time) == time
 
 
 def test_timeframe_to_next_date():
     # 2019-08-12 13:22:08
-    date = datetime.fromtimestamp(1565616128, tz=timezone.utc)
+    date = datetime.fromtimestamp(1565616128, tz=UTC)
     tf_list = [
         # 5m -> 2019-08-12 13:25:00
-        ("5m", datetime(2019, 8, 12, 13, 25, 0, tzinfo=timezone.utc)),
+        ("5m", datetime(2019, 8, 12, 13, 25, 0, tzinfo=UTC)),
         # 10m -> 2019-08-12 13:30:00
-        ("10m", datetime(2019, 8, 12, 13, 30, 0, tzinfo=timezone.utc)),
+        ("10m", datetime(2019, 8, 12, 13, 30, 0, tzinfo=UTC)),
         # 1h -> 2019-08-12 14:00:00
-        ("1h", datetime(2019, 8, 12, 14, 00, 0, tzinfo=timezone.utc)),
+        ("1h", datetime(2019, 8, 12, 14, 00, 0, tzinfo=UTC)),
         # 2h -> 2019-08-12 14:00:00
-        ("2h", datetime(2019, 8, 12, 14, 00, 0, tzinfo=timezone.utc)),
+        ("2h", datetime(2019, 8, 12, 14, 00, 0, tzinfo=UTC)),
         # 4h -> 2019-08-12 14:00:00
-        ("4h", datetime(2019, 8, 12, 16, 00, 0, tzinfo=timezone.utc)),
+        ("4h", datetime(2019, 8, 12, 16, 00, 0, tzinfo=UTC)),
         # 1d -> 2019-08-13 00:00:00
-        ("1d", datetime(2019, 8, 13, 0, 0, 0, tzinfo=timezone.utc)),
+        ("1d", datetime(2019, 8, 13, 0, 0, 0, tzinfo=UTC)),
     ]
 
     for interval, result in tf_list:
         assert timeframe_to_next_date(interval, date) == result
 
-    date = datetime.now(tz=timezone.utc)
+    date = datetime.now(tz=UTC)
     assert timeframe_to_next_date("5m") > date
 
-    date = datetime(2019, 8, 12, 13, 30, 0, tzinfo=timezone.utc)
+    date = datetime(2019, 8, 12, 13, 30, 0, tzinfo=UTC)
     assert timeframe_to_next_date("5m", date) == date + timedelta(minutes=5)
 
 
@@ -321,6 +322,7 @@ def test_amount_to_precision(
         (2.9977, TICK_SIZE, 0.005, 3.0, ROUND),
         (234.24, TICK_SIZE, 0.5, 234.0, ROUND),
         (234.26, TICK_SIZE, 0.5, 234.5, ROUND),
+        (nan, TICK_SIZE, 3, nan, ROUND),
         # Tests for TRUNCATTE
         (2.34559, DECIMAL_PLACES, 4, 2.3455, TRUNCATE),
         (2.34559, DECIMAL_PLACES, 5, 2.34559, TRUNCATE),
@@ -359,10 +361,11 @@ def test_amount_to_precision(
     ],
 )
 def test_price_to_precision(price, precision_mode, precision, expected, rounding_mode):
-    assert (
-        price_to_precision(price, precision, precision_mode, rounding_mode=rounding_mode)
-        == expected
-    )
+    result = price_to_precision(price, precision, precision_mode, rounding_mode=rounding_mode)
+    if not isnan(expected):
+        assert result == expected
+    else:
+        assert isnan(result)
 
 
 @pytest.mark.parametrize(

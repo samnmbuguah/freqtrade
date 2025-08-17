@@ -5,13 +5,23 @@ This module contains the argument manager class
 from argparse import ArgumentParser, Namespace, _ArgumentGroup
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from freqtrade.commands.cli_options import AVAILABLE_CLI_OPTIONS
 from freqtrade.constants import DEFAULT_CONFIG
 
 
-ARGS_COMMON = ["verbosity", "logfile", "version", "config", "datadir", "user_data_dir"]
+ARGS_COMMON = [
+    "verbosity",
+    "print_colorized",
+    "logfile",
+    "version",
+    "config",
+    "datadir",
+    "user_data_dir",
+]
+
+ARGS_MAIN = ["version_main"]
 
 ARGS_STRATEGY = [
     "strategy",
@@ -23,7 +33,7 @@ ARGS_STRATEGY = [
 
 ARGS_TRADE = ["db_url", "sd_notify", "dry_run", "dry_run_wallet", "fee"]
 
-ARGS_WEBSERVER: List[str] = []
+ARGS_WEBSERVER: list[str] = []
 
 ARGS_COMMON_OPTIMIZE = [
     "timeframe",
@@ -35,9 +45,9 @@ ARGS_COMMON_OPTIMIZE = [
     "pairs",
 ]
 
-ARGS_BACKTEST = ARGS_COMMON_OPTIMIZE + [
+ARGS_BACKTEST = [
+    *ARGS_COMMON_OPTIMIZE,
     "position_stacking",
-    "use_max_market_positions",
     "enable_protections",
     "dry_run_wallet",
     "timeframe_detail",
@@ -47,20 +57,20 @@ ARGS_BACKTEST = ARGS_COMMON_OPTIMIZE + [
     "backtest_breakdown",
     "backtest_cache",
     "freqai_backtest_live_models",
+    "backtest_notes",
 ]
 
-ARGS_HYPEROPT = ARGS_COMMON_OPTIMIZE + [
+ARGS_HYPEROPT = [
+    *ARGS_COMMON_OPTIMIZE,
     "hyperopt",
     "hyperopt_path",
     "position_stacking",
-    "use_max_market_positions",
     "enable_protections",
     "dry_run_wallet",
     "timeframe_detail",
     "epochs",
     "spaces",
     "print_all",
-    "print_colorized",
     "print_json",
     "hyperopt_jobs",
     "hyperopt_random_state",
@@ -69,24 +79,24 @@ ARGS_HYPEROPT = ARGS_COMMON_OPTIMIZE + [
     "disableparamexport",
     "hyperopt_ignore_missing_space",
     "analyze_per_epoch",
+    "early_stop",
 ]
 
-ARGS_EDGE = ARGS_COMMON_OPTIMIZE + ["stoploss_range"]
+ARGS_EDGE = [*ARGS_COMMON_OPTIMIZE]
 
 ARGS_LIST_STRATEGIES = [
     "strategy_path",
     "print_one_column",
-    "print_colorized",
     "recursive_strategy_search",
 ]
 
-ARGS_LIST_FREQAIMODELS = ["freqaimodel_path", "print_one_column", "print_colorized"]
+ARGS_LIST_FREQAIMODELS = ["freqaimodel_path", "print_one_column"]
 
-ARGS_LIST_HYPEROPTS = ["hyperopt_path", "print_one_column", "print_colorized"]
+ARGS_LIST_HYPEROPTS = ["hyperopt_path", "print_one_column"]
 
 ARGS_BACKTEST_SHOW = ["exportfilename", "backtest_show_pair_list", "backtest_breakdown"]
 
-ARGS_LIST_EXCHANGES = ["print_one_column", "list_exchanges_all"]
+ARGS_LIST_EXCHANGES = ["print_one_column", "list_exchanges_all", "trading_mode", "dex_exchanges"]
 
 ARGS_LIST_TIMEFRAMES = ["exchange", "print_one_column"]
 
@@ -117,11 +127,11 @@ ARGS_CREATE_USERDIR = ["user_data_dir", "reset"]
 ARGS_BUILD_CONFIG = ["config"]
 ARGS_SHOW_CONFIG = ["user_data_dir", "config", "show_sensitive"]
 
-ARGS_BUILD_STRATEGY = ["user_data_dir", "strategy", "template"]
+ARGS_BUILD_STRATEGY = ["user_data_dir", "strategy", "strategy_path", "template"]
 
 ARGS_CONVERT_DATA_TRADES = ["pairs", "format_from_trades", "format_to", "erase", "exchange"]
 ARGS_CONVERT_DATA = ["pairs", "format_from", "format_to", "erase", "exchange"]
-ARGS_CONVERT_DATA_OHLCV = ARGS_CONVERT_DATA + ["timeframes", "trading_mode", "candle_types"]
+ARGS_CONVERT_DATA_OHLCV = [*ARGS_CONVERT_DATA, "timeframes", "trading_mode", "candle_types"]
 
 ARGS_CONVERT_TRADES = [
     "pairs",
@@ -187,7 +197,7 @@ ARGS_PLOT_PROFIT = [
 
 ARGS_CONVERT_DB = ["db_url", "db_url_from"]
 
-ARGS_INSTALL_UI = ["erase_ui_only", "ui_version"]
+ARGS_INSTALL_UI = ["erase_ui_only", "ui_prerelease", "ui_version"]
 
 ARGS_SHOW_TRADES = ["db_url", "trade_ids", "print_json"]
 
@@ -204,7 +214,6 @@ ARGS_HYPEROPT_LIST = [
     "hyperopt_list_max_total_profit",
     "hyperopt_list_min_objective",
     "hyperopt_list_max_objective",
-    "print_colorized",
     "print_json",
     "hyperopt_list_no_details",
     "hyperoptexportfilename",
@@ -228,6 +237,8 @@ ARGS_ANALYZE_ENTRIES_EXITS = [
     "enter_reason_list",
     "exit_reason_list",
     "indicator_list",
+    "entry_only",
+    "exit_only",
     "timerange",
     "analysis_rejected",
     "analysis_to_csv",
@@ -240,31 +251,33 @@ ARGS_STRATEGY_UPDATER = ["strategy_list", "strategy_path", "recursive_strategy_s
 ARGS_LOOKAHEAD_ANALYSIS = [
     a
     for a in ARGS_BACKTEST
-    if a
-    not in ("position_stacking", "use_max_market_positions", "backtest_cache", "backtest_breakdown")
+    if a not in ("position_stacking", "backtest_cache", "backtest_breakdown", "backtest_notes")
 ] + ["minimum_trade_amount", "targeted_trade_amount", "lookahead_analysis_exportfilename"]
 
 ARGS_RECURSIVE_ANALYSIS = ["timeframe", "timerange", "dataformat_ohlcv", "pairs", "startup_candle"]
 
 # Command level configs - keep at the bottom of the above definitions
 NO_CONF_REQURIED = [
+    "backtest-filter",
+    "backtesting-show",
     "convert-data",
     "convert-trade-data",
     "download-data",
-    "list-timeframes",
+    "hyperopt-list",
+    "hyperopt-show",
+    "list-data",
+    "list-freqaimodels",
+    "list-hyperoptloss",
     "list-markets",
     "list-pairs",
     "list-strategies",
-    "list-freqaimodels",
-    "list-data",
-    "hyperopt-list",
-    "hyperopt-show",
-    "backtest-filter",
+    "list-timeframes",
     "plot-dataframe",
     "plot-profit",
     "show-trades",
-    "trades-to-ohlcv",
+    "install-ui",
     "strategy-updater",
+    "trades-to-ohlcv",
 ]
 
 NO_CONF_ALLOWED = ["create-userdir", "list-exchanges", "new-strategy"]
@@ -275,11 +288,11 @@ class Arguments:
     Arguments Class. Manage the arguments received by the cli
     """
 
-    def __init__(self, args: Optional[List[str]]) -> None:
+    def __init__(self, args: list[str] | None) -> None:
         self.args = args
-        self._parsed_arg: Optional[Namespace] = None
+        self._parsed_arg: Namespace | None = None
 
-    def get_parsed_arg(self) -> Dict[str, Any]:
+    def get_parsed_arg(self) -> dict[str, Any]:
         """
         Return the list of arguments
         :return: List[str] List of arguments
@@ -300,8 +313,6 @@ class Arguments:
         # (see https://bugs.python.org/issue16399)
         # Allow no-config for certain commands (like downloading / plotting)
         if "config" in parsed_arg and parsed_arg.config is None:
-            conf_required = "command" in parsed_arg and parsed_arg.command in NO_CONF_REQURIED
-
             if "user_data_dir" in parsed_arg and parsed_arg.user_data_dir is not None:
                 user_dir = parsed_arg.user_data_dir
             else:
@@ -314,14 +325,14 @@ class Arguments:
             else:
                 # Else use "config.json".
                 cfgfile = Path.cwd() / DEFAULT_CONFIG
-                if cfgfile.is_file() or not conf_required:
+                conf_optional = "command" in parsed_arg and parsed_arg.command in NO_CONF_REQURIED
+                if cfgfile.is_file() or not conf_optional:
+                    # Only inject config if the file exists, or if the config is required
                     parsed_arg.config = [DEFAULT_CONFIG]
 
         return parsed_arg
 
-    def _build_args(
-        self, optionlist: List[str], parser: Union[ArgumentParser, _ArgumentGroup]
-    ) -> None:
+    def _build_args(self, optionlist: list[str], parser: ArgumentParser | _ArgumentGroup) -> None:
         for val in optionlist:
             opt = AVAILABLE_CLI_OPTIONS[val]
             parser.add_argument(*opt.cli, dest=val, **opt.kwargs)
@@ -344,7 +355,7 @@ class Arguments:
         self.parser = ArgumentParser(
             prog="freqtrade", description="Free, open source crypto trading bot"
         )
-        self._build_args(optionlist=["version"], parser=self.parser)
+        self._build_args(optionlist=ARGS_MAIN, parser=self.parser)
 
         from freqtrade.commands import (
             start_analysis_entries_exits,
@@ -363,6 +374,7 @@ class Arguments:
             start_list_data,
             start_list_exchanges,
             start_list_freqAI_models,
+            start_list_hyperopt_loss_functions,
             start_list_markets,
             start_list_strategies,
             start_list_timeframes,
@@ -496,7 +508,9 @@ class Arguments:
 
         # Add edge subcommand
         edge_cmd = subparsers.add_parser(
-            "edge", help="Edge module.", parents=[_common_parser, _strategy_parser]
+            "edge",
+            help="Edge module. No longer part of Freqtrade",
+            parents=[_common_parser, _strategy_parser],
         )
         edge_cmd.set_defaults(func=start_edge)
         self._build_args(optionlist=ARGS_EDGE, parser=edge_cmd)
@@ -563,6 +577,15 @@ class Arguments:
         )
         list_strategies_cmd.set_defaults(func=start_list_strategies)
         self._build_args(optionlist=ARGS_LIST_STRATEGIES, parser=list_strategies_cmd)
+
+        # Add list-Hyperopt loss subcommand
+        list_hyperopt_loss_cmd = subparsers.add_parser(
+            "list-hyperoptloss",
+            help="Print available hyperopt loss functions.",
+            parents=[_common_parser],
+        )
+        list_hyperopt_loss_cmd.set_defaults(func=start_list_hyperopt_loss_functions)
+        self._build_args(optionlist=ARGS_LIST_HYPEROPTS, parser=list_hyperopt_loss_cmd)
 
         # Add list-freqAI Models subcommand
         list_freqaimodels_cmd = subparsers.add_parser(

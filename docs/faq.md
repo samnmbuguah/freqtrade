@@ -40,11 +40,17 @@ This could be caused by the following reasons:
 * The installation did not complete successfully.
   * Please check the [Installation documentation](installation.md).
 
+### The bot starts, but in STOPPED mode
+
+Make sure you set the `initial_state` config option to `"running"` in your config.json
+
 ### I have waited 5 minutes, why hasn't the bot made any trades yet?
 
-* Depending on the buy strategy, the amount of whitelisted coins, the
-situation of the market etc, it can take up to hours to find a good entry
+* Depending on the entry strategy, the amount of whitelisted coins, the
+situation of the market etc, it can take up to hours or days to find a good entry
 position for a trade. Be patient!
+
+* Backtesting will tell you roughly how many trades to expect - but that won't guarantee that they'll be distributed evenly across time - so you could have 20 trades on one day, and 0 for the rest of the week.
 
 * It may be because of a configuration error. It's best to check the logs, they usually tell you if the bot is simply not getting buy signals (only heartbeat messages), or if there is something wrong (errors / exceptions in the log).
 
@@ -96,9 +102,30 @@ You can use "current" market data by using the [dataprovider](strategy-customiza
 
 You can use the `/stopentry` command in Telegram to prevent future trade entry, followed by `/forceexit all` (sell all open trades).
 
+### I sold the bot's capital and now there's errors in the log
+
+Freqtrade assumes that the trades it opens are managed only though the bot.  
+If you happen to (accidentally) sell the bot's capital, freqtrade will try to recover by trying to re-find on-exchange orders.
+
+This is a best-effort approach, and will not work in all cases, especially when using order types that are not supported by freqtrade (OCO, iceberg, etc.), or when working with older trades (where the exchange no longer provides full order information).
+The exact limits will vary between exchanges - with the details usually being documented in the exchange's API documentation.
+
 ### I want to run multiple bots on the same machine
 
 Please look at the [advanced setup documentation Page](advanced-setup.md#running-multiple-instances-of-freqtrade).
+
+### I'm getting "Impossible to load Strategy" when starting the bot
+
+This error message is shown when the bot cannot load the strategy.
+Usually, you can use `freqtrade list-strategies` to list all available strategies. 
+The output of this command will also include a status column, showing if the strategy can be loaded.
+
+Please check the following:
+
+* Are you using the correct strategy name? The strategy name is case-sensitive and must correspond to the Strategy class name (not the filename!).
+* Is the strategy in the `user_data/strategies` directory, and has the file-ending `.py`?
+* Does the bot show other warnings before this error? Maybe you're missing some dependencies for the strategy - which would be highlighted in the log.
+* In case of docker - is the strategy directory mounted correctly (check the volumes part of the docker-compose file)?
 
 ### I'm getting "Missing data fillup" messages in the log
 
@@ -116,6 +143,10 @@ This message is a warning that the candles had a price jump of > 30%.
 This might be a sign that the pair stopped trading, and some token exchange took place (e.g. COCOS in 2021 - where price jumped from 0.0000154 to 0.01621).
 This message is often accompanied by ["Missing data fillup"](#im-getting-missing-data-fillup-messages-in-the-log) - as trading on such pairs is often stopped for some time.
 
+### I want to reset the bot's database
+
+To reset the bot's database, you can either delete the database (by default `tradesv3.sqlite` or `tradesv3.dryrun.sqlite`), or use a different database url via `--db-url` (e.g. `sqlite:///mynewdatabase.sqlite`).
+
 ### I'm getting "Outdated history for pair xxx" in the log
 
 The bot is trying to tell you that it got an outdated last candle (not the last complete candle).
@@ -127,6 +158,14 @@ This warning can point to one of the below problems:
 * Wrong system time -> Ensure your system-time is correct.
 * Barely traded pair -> Check the pair on the exchange webpage, look at the timeframe your strategy uses. If the pair does not have any volume in some candles (usually visualized with a "volume 0" bar, and a "_" as candle), this pair did not have any trades in this timeframe. These pairs should ideally be avoided, as they can cause problems with order-filling.
 * API problem -> API returns wrong data (this only here for completeness, and should not happen with supported exchanges).
+
+### I get the message "Couldn't reuse watch for xxx" in the log
+
+This is an informational message that the bot tried to use candles from the websocket, but the exchange didn't provide the right information.
+This can happen if there was an interruption to the websocket connection - or if the pair didn't have any trades happen in the timeframe you are using.
+
+Freqtrade will handle this gracefully by falling back to the REST api.
+While this makes the iteration slightly slower (due to the REST Api call) - it will not cause any problems to the bot's operation.
 
 ### I'm getting the "Exchange XXX does not support market orders." message and cannot run my strategy
 
@@ -146,9 +185,9 @@ The same fix should be applied in the configuration file, if order types are def
 
 ### I'm trying to start the bot live, but get an API permission error
 
-Errors like `Invalid API-key, IP, or permissions for action` mean exactly what they actually say.
-Your API key is either invalid (copy/paste error? check for leading/trailing spaces in the config), expired, or the IP you're running the bot from is not enabled in the Exchange's API console.
-Usually, the permission "Spot Trading" (or the equivalent in the exchange you use) will be necessary.
+Errors like `Invalid API-key, IP, or permissions for action` mean exactly what they actually say.  
+Your API key is either invalid (copy/paste error? check for leading/trailing spaces in the config), expired, or the IP you're running the bot from is not enabled in the Exchange's API console.  
+Usually, the permission "Spot Trading" (or the equivalent in the exchange you use) will be necessary.  
 Futures will usually have to be enabled specifically.
 
 ### How do I search the bot logs for something?
@@ -196,10 +235,7 @@ On Windows, the `--logfile` option is also supported by Freqtrade and you can us
 First of all, most indicator libraries don't have GPU support - as such, there would be little benefit for indicator calculations.
 The GPU improvements would only apply to pandas-native calculations - or ones written by yourself.
 
-For hyperopt, freqtrade is using scikit-optimize, which is built on top of scikit-learn.
-Their statement about GPU support is [pretty clear](https://scikit-learn.org/stable/faq.html#will-you-add-gpu-support).
-
-GPU's also are only good at crunching numbers (floating point operations).
+GPU's are only good at crunching numbers (floating point operations).
 For hyperopt, we need both number-crunching (find next parameters) and running python code (running backtesting).
 As such, GPU's are not too well suited for most parts of hyperopt.
 
@@ -247,20 +283,6 @@ Example: 4% profit 650 times vs 0,3% profit a trade 10000 times in a year. If we
 
 Example:
 `freqtrade --config config.json --strategy SampleStrategy --hyperopt SampleHyperopt -e 1000 --timerange 20190601-20200601`
-
-## Edge module
-
-### Edge implements interesting approach for controlling position size, is there any theory behind it?
-
-The Edge module is mostly a result of brainstorming of [@mishaker](https://github.com/mishaker) and [@creslinux](https://github.com/creslinux) freqtrade team members.
-
-You can find further info on expectancy, win rate, risk management and position size in the following sources:
-
-- https://www.tradeciety.com/ultimate-math-guide-for-traders/
-- https://samuraitradingacademy.com/trading-expectancy/
-- https://www.learningmarkets.com/determining-expectancy-in-your-trading/
-- https://www.lonestocktrader.com/make-money-trading-positive-expectancy/
-- https://www.babypips.com/trading/trade-expectancy-matter
 
 ## Official channels
 

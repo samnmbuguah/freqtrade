@@ -25,7 +25,7 @@ function check_installed_python() {
         exit 2
     fi
 
-    for v in 12 11 10 9
+    for v in 13 12 11
     do
         PYTHON="python3.${v}"
         which $PYTHON
@@ -36,7 +36,7 @@ function check_installed_python() {
         fi
     done
 
-    echo "No usable python found. Please make sure to have python3.9 or newer installed."
+    echo "No usable python found. Please make sure to have python3.11 or newer installed."
     exit 1
 }
 
@@ -91,7 +91,6 @@ function updateenv() {
             fi
         fi
     fi
-    install_talib
 
     ${PYTHON} -m pip install --upgrade -r ${REQUIREMENTS} ${REQUIREMENTS_HYPEROPT} ${REQUIREMENTS_PLOT} ${REQUIREMENTS_FREQAI} ${REQUIREMENTS_FREQAI_RL}
     if [ $? -ne 0 ]; then
@@ -118,41 +117,6 @@ function updateenv() {
     fi
 }
 
-# Install tab lib
-function install_talib() {
-    if [ -f /usr/local/lib/libta_lib.a ] || [ -f /usr/local/lib/libta_lib.so ] || [ -f /usr/lib/libta_lib.so ]; then
-        echo "ta-lib already installed, skipping"
-        return
-    fi
-
-    cd build_helpers && ./install_ta-lib.sh
-
-    if [ $? -ne 0 ]; then
-        echo "Quitting. Please fix the above error before continuing."
-        cd ..
-        exit 1
-    fi;
-
-    cd ..
-}
-
-function install_mac_newer_python_dependencies() {
-
-    if [ ! $(brew --prefix --installed hdf5 2>/dev/null) ]
-    then
-        echo_block "Installing hdf5"
-        brew install hdf5
-    fi
-    export HDF5_DIR=$(brew --prefix)
-
-    if [ ! $(brew --prefix --installed c-blosc 2>/dev/null) ]
-    then
-        echo_block "Installing c-blosc"
-        brew install c-blosc
-    fi
-    export CBLOSC_DIR=$(brew --prefix)
-}
-
 # Install bot MacOS
 function install_macos() {
     if [ ! -x "$(command -v brew)" ]
@@ -165,10 +129,6 @@ function install_macos() {
 
     #Gets number after decimal in python version
     version=$(egrep -o 3.\[0-9\]+ <<< $PYTHON | sed 's/3.//g')
-
-    if [[ $version -ge 9 ]]; then               #Checks if python version >= 3.9
-        install_mac_newer_python_dependencies
-    fi
 }
 
 # Install bot Debian_ubuntu
@@ -277,7 +237,7 @@ function install() {
         install_redhat
     else
         echo "This script does not support your OS."
-        echo "If you have Python version 3.9 - 3.12, pip, virtualenv, ta-lib you can continue."
+        echo "If you have Python version 3.11 - 3.13, pip, virtualenv installed you can continue."
         echo "Wait 10 seconds to continue the next install steps or use ctrl+c to interrupt this shell."
         sleep 10
     fi
@@ -304,7 +264,7 @@ function help() {
     echo "	-p,--plot       Install dependencies for Plotting scripts."
 }
 
-# Verify if 3.9+ is installed
+# Verify if 3.11+ is installed
 check_installed_python
 
 case $* in

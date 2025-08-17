@@ -2,7 +2,7 @@ import re
 from unittest.mock import ANY, MagicMock
 
 import pytest
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from freqtrade_client import FtRestClient
 from freqtrade_client.ft_client import add_arguments, main_exec
@@ -45,7 +45,7 @@ def test_FtRestClient_call_invalid(caplog):
     with pytest.raises(ValueError):
         client._call("PUTTY", "/dummytest")
 
-    client._session.request = MagicMock(side_effect=ConnectionError())
+    client._session.request = MagicMock(side_effect=RequestsConnectionError())
     client._call("GET", "/dummytest")
 
     assert log_has_re("Connection error", caplog)
@@ -72,7 +72,6 @@ def test_FtRestClient_call_invalid(caplog):
         ("weekly", [15], {}),
         ("monthly", [], {}),
         ("monthly", [12], {}),
-        ("edge", [], {}),
         ("profit", [], {}),
         ("stats", [], {}),
         ("performance", [], {}),
@@ -85,6 +84,8 @@ def test_FtRestClient_call_invalid(caplog):
         ("trades", [], {}),
         ("trades", [5], {}),
         ("trades", [5, 5], {}),  # With offset
+        ("trades", [5, 5, True], {}),  # Explicit order_by_id=True
+        ("trades", [5, 5, False], {}),  # order_by_id=False
         ("trade", [1], {}),
         ("delete_trade", [1], {}),
         ("cancel_open_order", [1], {}),
@@ -127,6 +128,10 @@ def test_FtRestClient_call_invalid(caplog):
         ("pair_candles", ["XRP/USDT", "5m", 500], {"columns": ["close_time,close"]}),
         ("pair_history", ["XRP/USDT", "5m", "SampleStrategy"], {}),
         ("pair_history", ["XRP/USDT", "5m"], {"strategy": "SampleStrategy"}),
+        ("trades", [], {"order_by_id": True}),
+        ("trades", [], {"order_by_id": False}),
+        ("trades", [5], {"order_by_id": False}),
+        ("trades", [5, 5], {"order_by_id": True}),
         ("sysinfo", [], {}),
         ("health", [], {}),
     ],
