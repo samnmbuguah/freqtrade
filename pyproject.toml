@@ -29,7 +29,7 @@ classifiers = [
 
 dependencies = [
   # from requirements.txt
-  "ccxt>=4.4.87",
+  "ccxt>=4.5.4",
   "SQLAlchemy>=2.0.6",
   "python-telegram-bot>=20.1",
   "humanize>=4.0.0",
@@ -85,17 +85,16 @@ hyperopt = [
 freqai = [
   "scikit-learn",
   "joblib",
-  'catboost; platform_machine != "aarch64"',
   "lightgbm",
   "xgboost",
   "tensorboard",
   "datasieve>=0.1.5",
 ]
 freqai_rl = [
-  "torch",
+  "torch; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "gymnasium",
-  "stable-baselines3",
-  "sb3-contrib",
+  "stable-baselines3; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "sb3-contrib; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "tqdm",
 ]
 develop = [
@@ -183,6 +182,7 @@ skip_glob = ["**/.env*", "**/env/*", "**/.venv/*", "**/docs/*", "**/user_data/*"
 known_first_party = ["freqtrade_client"]
 
 [tool.pytest.ini_options]
+# TODO: should be migrated to [tool.pytest] as support for this was added in 9.0
 log_format = "%(asctime)s %(levelname)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
 
@@ -224,7 +224,7 @@ exclude = [
 ]
 ignore = ["freqtrade/vendor/**"]
 pythonPlatform = "All"
-pythonVersion = "3.9"
+pythonVersion = "3.11"
 
 typeCheckingMode = "off"
 # analyzeUnannotatedFunctions = false

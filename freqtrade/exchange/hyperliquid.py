@@ -3,6 +3,7 @@
 import logging
 from copy import deepcopy
 from datetime import datetime
+from typing import Any
 
 from freqtrade.constants import BuySell
 from freqtrade.enums import MarginMode, TradingMode
@@ -28,6 +29,7 @@ class Hyperliquid(Exchange):
         "stoploss_on_exchange": False,
         "exchange_has_overrides": {"fetchTrades": False},
         "marketOrderRequiresPrice": True,
+        "download_data_parallel_quick": False,
         "ws_enabled": True,
     }
     _ft_has_futures: FtHas = {
@@ -35,14 +37,15 @@ class Hyperliquid(Exchange):
         "stoploss_order_types": {"limit": "limit"},
         "stoploss_blocks_assets": False,
         "stop_price_prop": "stopPrice",
-        "funding_fee_timeframe": "1h",
         "funding_fee_candle_limit": 500,
         "uses_leverage_tiers": False,
+        "mark_ohlcv_price": "futures",
     }
 
     _supported_trading_mode_margin_pairs: list[tuple[TradingMode, MarginMode]] = [
         (TradingMode.SPOT, MarginMode.NONE),
         (TradingMode.FUTURES, MarginMode.ISOLATED),
+        (TradingMode.FUTURES, MarginMode.CROSS),
     ]
 
     @property
@@ -53,6 +56,13 @@ class Hyperliquid(Exchange):
             config.update({"options": {"defaultType": "spot"}})
         config.update(super()._ccxt_config)
         return config
+
+    def market_is_tradable(self, market: dict[str, Any]) -> bool:
+        parent_check = super().market_is_tradable(market)
+
+        # Exclude hip3 markets for now - which have the format XYZ:GOOGL/USDT:USDT -
+        # and XYZ:GOOGL as base
+        return parent_check and ":" not in market["base"]
 
     def get_max_leverage(self, pair: str, stake_amount: float | None) -> float:
         # There are no leverage tiers
@@ -98,7 +108,6 @@ class Hyperliquid(Exchange):
                    'SOL/USDC:USDC': 43}}
         """
         # Defining/renaming variables to match the documentation
-        isolated_margin = wallet_balance
         position_size = amount
         price = open_rate
         position_value = price * position_size
@@ -116,8 +125,14 @@ class Hyperliquid(Exchange):
         #       3. Divide this by 2
         maintenance_margin_required = position_value / max_leverage / 2
 
-        # Docs: margin_available (isolated) = isolated_margin - maintenance_margin_required
-        margin_available = isolated_margin - maintenance_margin_required
+        if self.margin_mode == MarginMode.ISOLATED:
+            # Docs: margin_available (isolated) = isolated_margin - maintenance_margin_required
+            margin_available = stake_amount - maintenance_margin_required
+        elif self.margin_mode == MarginMode.CROSS:
+            # Docs: margin_available (cross) = account_value - maintenance_margin_required
+            margin_available = wallet_balance - maintenance_margin_required
+        else:
+            raise OperationalException("Unsupported margin mode for liquidation price calculation")
 
         # Docs: The maintenance margin is half of the initial margin at max leverage
         # The docs don't explicitly specify maintenance leverage, but this works.

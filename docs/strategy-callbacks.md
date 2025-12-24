@@ -634,7 +634,7 @@ class AwesomeStrategy(IStrategy):
 
 ## Custom order price rules
 
-By default, freqtrade use the orderbook to automatically set an order price([Relevant documentation](configuration.md#prices-used-for-orders)), you also have the option to create custom order prices based on your strategy.
+By default, freqtrade use the orderbook to automatically set an order price ([Relevant documentation](configuration.md#prices-used-for-orders)), you also have the option to create custom order prices based on your strategy.
 
 You can use this feature by creating a `custom_entry_price()` function in your strategy file to customize entry prices and `custom_exit_price()` for exits.
 
@@ -644,7 +644,7 @@ Each of these methods are called right before placing an order on the exchange.
     If your custom pricing function return None or an invalid value, price will fall back to `proposed_rate`, which is based on the regular pricing configuration.
 
 !!! Note
-    Using custom_entry_price, the Trade object will be available as soon as the first entry order associated with the trade is created, for the first entry, `trade` parameter value will be `None`.
+    When using `custom_entry_price()`, the Trade object will be available as soon as the first entry order associated with the trade is created, for the first entry, `trade` parameter value will be `None`.
 
 ### Custom order entry and exit price example
 
@@ -1243,15 +1243,23 @@ class AwesomeStrategy(IStrategy):
 
 ```
 
+!!! Tip "Learn more about storing data"
+    You can learn more about storing data on the [Storing custom trade data](strategy-advanced.md#storing-information-persistent) section.
+    Please keep in mind that this is considered advanced usage, and should be used with care.
+
 ## Plot annotations callback
 
 The plot annotations callback is called whenever freqUI requests data to display a chart.
 This callback has no meaning in the trade cycle context and is only used for charting purposes.
 
 The strategy can then return a list of `AnnotationType` objects to be displayed on the chart.
-Depending on the content returned - the chart can display horizontal areas, vertical areas, or boxes.
+Depending on the content returned - the chart can display horizontal areas, vertical areas, boxes or lines.
 
-The full object looks like this:
+### Annotation types
+
+Currently two types of annotations are supported, `area` and `line`.
+
+#### Area
 
 ``` json
 {
@@ -1261,7 +1269,26 @@ The full object looks like this:
     "y_start": 94000.2,  // Price / y axis value
     "y_end": 98000, // Price / y axis value
     "color": "",
+    "z_level": 5, // z-level, higher values are drawn on top of lower values. Positions relative to the Chart elements need to be set in freqUI.
     "label": "some label"
+}
+```
+
+#### Line
+
+``` json
+{
+    "type": "line", // Type of the annotation, currently only "line" is supported
+    "start": "2024-01-01 15:00:00", // Start date of the line
+    "end": "2024-01-01 16:00:00",  // End date of the line
+    "y_start": 94000.2,  // Price / y axis value
+    "y_end": 98000, // Price / y axis value
+    "color": "",
+    "z_level": 5, // z-level, higher values are drawn on top of lower values. Positions relative to the Chart elements need to be set in freqUI.
+    "label": "some label",
+    "width": 2, // Optional, line width in pixels. Defaults to 1
+    "line_style": "dashed", // Optional, can be "solid", "dashed" or "dotted". Defaults to "solid"
+
 }
 ```
 
@@ -1332,7 +1359,7 @@ Entries will be validated, and won't be passed to the UI if they don't correspon
             while start_dt < end_date:
                 start_dt += timedelta(hours=1)
                 if (start_dt.hour % 4) == 0:
-                    mark_areas.append(
+                    annotations.append(
                         {
                             "type": "area",
                             "label": "4h",
@@ -1343,7 +1370,7 @@ Entries will be validated, and won't be passed to the UI if they don't correspon
                     )
                 elif (start_dt.hour % 2) == 0:
                 price = dataframe.loc[dataframe["date"] == start_dt, ["close"]].mean()
-                    mark_areas.append(
+                    annotations.append(
                         {
                             "type": "area",
                             "label": "2h",
@@ -1352,6 +1379,7 @@ Entries will be validated, and won't be passed to the UI if they don't correspon
                             "y_end": price * 1.01,
                             "y_start": price * 0.99,
                             "color": "rgba(0, 255, 0, 0.4)",
+                            "z_level": 5,
                         }
                     )
 

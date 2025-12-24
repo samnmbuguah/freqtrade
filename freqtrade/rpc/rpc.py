@@ -47,6 +47,7 @@ from freqtrade.util import (
     dt_ts,
     dt_ts_def,
     format_date,
+    format_pct,
     shorten_date,
 )
 from freqtrade.wallets import PositionWallet, Wallet
@@ -136,6 +137,7 @@ class RPC:
             "strategy_version": strategy_version,
             "dry_run": config["dry_run"],
             "trading_mode": config.get("trading_mode", "spot"),
+            "margin_mode": config.get("margin_mode", ""),
             "short_allowed": config.get("trading_mode", "spot") != "spot",
             "stake_currency": config["stake_currency"],
             "stake_currency_decimals": decimals_per_coin(config["stake_currency"]),
@@ -301,7 +303,7 @@ class RPC:
         fiat_total_profit_sum = nan
         for trade in self._rpc_trade_status():
             # Format profit as a string with the right sign
-            profit = f"{trade['profit_ratio']:.2%}"
+            profit = f"{format_pct(trade['profit_ratio'])}"
             fiat_profit = trade.get("profit_fiat", None)
             if fiat_profit is None or isnan(fiat_profit):
                 fiat_profit = trade.get("profit_abs", 0.0)
@@ -938,7 +940,11 @@ class RPC:
         return {"status": "Reloaded from orders from exchange"}
 
     def __exec_force_exit(
-        self, trade: Trade, ordertype: str | None, amount: float | None = None
+        self,
+        trade: Trade,
+        ordertype: str | None,
+        amount: float | None = None,
+        price: float | None = None,
     ) -> bool:
         # Check if there is there are open orders
         trade_entry_cancelation_registry = []
@@ -962,8 +968,13 @@ class RPC:
                 # Order cancellation failed, so we can't exit.
                 return False
             # Get current rate and execute sell
-            current_rate = self._freqtrade.exchange.get_rate(
-                trade.pair, side="exit", is_short=trade.is_short, refresh=True
+
+            current_rate = (
+                self._freqtrade.exchange.get_rate(
+                    trade.pair, side="exit", is_short=trade.is_short, refresh=True
+                )
+                if ordertype == "market" or price is None
+                else price
             )
             exit_check = ExitCheckTuple(exit_type=ExitType.FORCE_EXIT)
             order_type = ordertype or self._freqtrade.strategy.order_types.get(
@@ -981,18 +992,28 @@ class RPC:
                 sub_amount = amount
 
             self._freqtrade.execute_trade_exit(
-                trade, current_rate, exit_check, ordertype=order_type, sub_trade_amt=sub_amount
+                trade,
+                current_rate,
+                exit_check,
+                ordertype=order_type,
+                sub_trade_amt=sub_amount,
+                skip_custom_exit_price=price is not None and ordertype == "limit",
             )
 
             return True
         return False
 
     def _rpc_force_exit(
-        self, trade_id: str, ordertype: str | None = None, *, amount: float | None = None
+        self,
+        trade_id: str,
+        ordertype: str | None = None,
+        *,
+        amount: float | None = None,
+        price: float | None = None,
     ) -> dict[str, str]:
         """
         Handler for forceexit <id>.
-        Sells the given trade at current price
+        exits the given trade. Uses current price if price is None.
         """
 
         if self._freqtrade.state == State.STOPPED:
@@ -1008,17 +1029,21 @@ class RPC:
                 return {"result": "Created exit orders for all open trades."}
 
             # Query for trade
-            trade = Trade.get_trades(
-                trade_filter=[
-                    Trade.id == trade_id,
-                    Trade.is_open.is_(True),
-                ]
-            ).first()
+            trade = (
+                Trade.get_trades(
+                    trade_filter=[
+                        Trade.id == int(trade_id),
+                        Trade.is_open.is_(True),
+                    ]
+                ).first()
+                if trade_id.isdigit()
+                else None
+            )
             if not trade:
                 logger.warning("force_exit: Invalid argument received")
                 raise RPCException("invalid argument")
 
-            result = self.__exec_force_exit(trade, ordertype, amount)
+            result = self.__exec_force_exit(trade, ordertype, amount, price)
             Trade.commit()
             self._freqtrade.wallets.update()
             if not result:
@@ -1556,69 +1581,76 @@ class RPC:
         selected_cols: list[str] | None,
         live: bool,
     ) -> dict[str, Any]:
+        """
+        Analyzed dataframe in Dict form, with full history loading and strategy analysis.
+        Loads the full history from disk or exchange, and runs the strategy analysis on it.
+        Should only be used in webserver mode, as it can interfere with a running bot.
+        """
         timerange_parsed = TimeRange.parse_timerange(config.get("timerange"))
 
         from freqtrade.data.converter import trim_dataframe
         from freqtrade.data.dataprovider import DataProvider
+        from freqtrade.persistence.usedb_context import FtNoDBContext
         from freqtrade.resolvers.strategy_resolver import StrategyResolver
 
-        strategy_name = ""
-        startup_candles = 0
-        if config.get("strategy"):
-            strategy = StrategyResolver.load_strategy(config)
-            startup_candles = strategy.startup_candle_count
-            strategy_name = strategy.get_strategy_name()
+        with FtNoDBContext():
+            strategy_name = ""
+            startup_candles = 0
+            if config.get("strategy"):
+                strategy = StrategyResolver.load_strategy(config)
+                startup_candles = strategy.startup_candle_count
+                strategy_name = strategy.get_strategy_name()
 
-        if live:
-            data = exchange.get_historic_ohlcv(
-                pair=pair,
-                timeframe=timeframe,
-                since_ms=timerange_parsed.startts * 1000
-                if timerange_parsed.startts
-                else dt_ts(dt_now() - timedelta(days=30)),
-                is_new_pair=True,  # history is never available - so always treat as new pair
-                candle_type=config.get("candle_type_def", CandleType.SPOT),
-                until_ms=timerange_parsed.stopts,
-            )
-        else:
-            _data = load_data(
-                datadir=config["datadir"],
-                pairs=[pair],
-                timeframe=timeframe,
-                timerange=timerange_parsed,
-                data_format=config["dataformat_ohlcv"],
-                candle_type=config.get("candle_type_def", CandleType.SPOT),
-                startup_candles=startup_candles,
-            )
-            if pair not in _data:
-                raise RPCException(
-                    f"No data for {pair}, {timeframe} in {config.get('timerange')} found."
+            if live:
+                data = exchange.get_historic_ohlcv(
+                    pair=pair,
+                    timeframe=timeframe,
+                    since_ms=timerange_parsed.startts * 1000
+                    if timerange_parsed.startts
+                    else dt_ts(dt_now() - timedelta(days=30)),
+                    is_new_pair=True,  # history is never available - so always treat as new pair
+                    candle_type=config.get("candle_type_def", CandleType.SPOT),
+                    until_ms=timerange_parsed.stopts,
                 )
-            data = _data[pair]
+            else:
+                _data = load_data(
+                    datadir=config["datadir"],
+                    pairs=[pair],
+                    timeframe=timeframe,
+                    timerange=timerange_parsed,
+                    data_format=config["dataformat_ohlcv"],
+                    candle_type=config.get("candle_type_def", CandleType.SPOT),
+                    startup_candles=startup_candles,
+                )
+                if pair not in _data:
+                    raise RPCException(
+                        f"No data for {pair}, {timeframe} in {config.get('timerange')} found."
+                    )
+                data = _data[pair]
 
-        annotations = []
-        if config.get("strategy"):
-            strategy.dp = DataProvider(config, exchange=exchange, pairlists=None)
-            strategy.ft_bot_start()
+            annotations = []
+            if config.get("strategy"):
+                strategy.dp = DataProvider(config, exchange=exchange, pairlists=None)
+                strategy.ft_bot_start()
 
-            df_analyzed = strategy.analyze_ticker(data, {"pair": pair})
-            df_analyzed = trim_dataframe(
-                df_analyzed, timerange_parsed, startup_candles=startup_candles
+                df_analyzed = strategy.analyze_ticker(data, {"pair": pair})
+                df_analyzed = trim_dataframe(
+                    df_analyzed, timerange_parsed, startup_candles=startup_candles
+                )
+                annotations = strategy.ft_plot_annotations(pair=pair, dataframe=df_analyzed)
+
+            else:
+                df_analyzed = data
+
+            return RPC._convert_dataframe_to_dict(
+                strategy_name,
+                pair,
+                timeframe,
+                df_analyzed.copy(),
+                dt_now(),
+                selected_cols,
+                annotations,
             )
-            annotations = strategy.ft_plot_annotations(pair=pair, dataframe=df_analyzed)
-
-        else:
-            df_analyzed = data
-
-        return RPC._convert_dataframe_to_dict(
-            strategy_name,
-            pair,
-            timeframe,
-            df_analyzed.copy(),
-            dt_now(),
-            selected_cols,
-            annotations,
-        )
 
     def _rpc_plot_config(self) -> dict[str, Any]:
         if (

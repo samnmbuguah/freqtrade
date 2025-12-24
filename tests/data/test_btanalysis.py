@@ -75,7 +75,7 @@ def test_get_latest_hyperopt_file(testdatadir):
     # Test with absolute path
     with pytest.raises(
         OperationalException,
-        match="--hyperopt-filename expects only the filename, not an absolute path.",
+        match=r"--hyperopt-filename expects only the filename, not an absolute path\.",
     ):
         get_latest_hyperopt_file(str(testdatadir.parent), str(testdatadir.parent))
 
@@ -290,20 +290,23 @@ def test_combine_dataframes_with_mean(testdatadir):
 
 
 def test_combined_dataframes_with_rel_mean(testdatadir):
-    pairs = ["ETH/BTC", "ADA/BTC"]
+    pairs = ["BTC/USDT", "XRP/USDT"]
     data = load_data(datadir=testdatadir, pairs=pairs, timeframe="5m")
     df = combined_dataframes_with_rel_mean(
-        data, datetime(2018, 1, 12, tzinfo=UTC), datetime(2018, 1, 28, tzinfo=UTC)
+        data,
+        fromdt=data["BTC/USDT"].at[0, "date"],
+        todt=data["BTC/USDT"].at[data["BTC/USDT"].index[-1], "date"],
     )
     assert isinstance(df, DataFrame)
-    assert "ETH/BTC" not in df.columns
-    assert "ADA/BTC" not in df.columns
+    assert "BTC/USDT" not in df.columns
+    assert "XRP/USDT" not in df.columns
     assert "mean" in df.columns
     assert "rel_mean" in df.columns
     assert "count" in df.columns
     assert df.iloc[0]["count"] == 2
     assert df.iloc[-1]["count"] == 2
-    assert len(df) < len(data["ETH/BTC"])
+    assert len(df) < len(data["BTC/USDT"])
+    assert df["rel_mean"].between(-0.5, 0.5).all()
 
 
 def test_combine_dataframes_with_mean_no_data(testdatadir):
@@ -344,7 +347,7 @@ def test_create_cum_profit1(testdatadir):
     assert cum_profits.iloc[0]["cum_profits"] == 0
     assert pytest.approx(cum_profits.iloc[-1]["cum_profits"]) == 9.0225563e-05
 
-    with pytest.raises(ValueError, match="Trade dataframe empty."):
+    with pytest.raises(ValueError, match=r"Trade dataframe empty\."):
         create_cum_profit(
             df.set_index("date"),
             bt_data[bt_data["pair"] == "NOTAPAIR"],
@@ -369,10 +372,10 @@ def test_calculate_max_drawdown(testdatadir):
     underwater = calculate_underwater(bt_data)
     assert isinstance(underwater, DataFrame)
 
-    with pytest.raises(ValueError, match="Trade dataframe empty."):
+    with pytest.raises(ValueError, match=r"Trade dataframe empty\."):
         calculate_max_drawdown(DataFrame())
 
-    with pytest.raises(ValueError, match="Trade dataframe empty."):
+    with pytest.raises(ValueError, match=r"Trade dataframe empty\."):
         calculate_underwater(DataFrame())
 
 
@@ -391,7 +394,7 @@ def test_calculate_csum(testdatadir):
     assert csum_min1 == csum_min + 5
     assert csum_max1 == csum_max + 5
 
-    with pytest.raises(ValueError, match="Trade dataframe empty."):
+    with pytest.raises(ValueError, match=r"Trade dataframe empty\."):
         csum_min, csum_max = calculate_csum(DataFrame())
 
 
@@ -575,12 +578,18 @@ def test_calculate_max_drawdown2():
     # No losing trade ...
     drawdown = calculate_max_drawdown(df, date_col="open_date", value_col="profit")
     assert drawdown.drawdown_abs == 0.0
+    assert drawdown.low_value == 0.0
+    assert drawdown.current_high_value >= 0.0
+    assert drawdown.current_drawdown_abs == 0.0
 
     df1 = DataFrame(zip(values[:5], dates[:5], strict=False), columns=["profit", "open_date"])
     df1.loc[:, "profit"] = df1["profit"] * -1
     # No winning trade ...
     drawdown = calculate_max_drawdown(df1, date_col="open_date", value_col="profit")
     assert drawdown.drawdown_abs == 0.055545
+    assert drawdown.high_value == 0.0
+    assert drawdown.current_high_value == 0.0
+    assert drawdown.current_drawdown_abs == 0.055545
 
 
 @pytest.mark.parametrize(

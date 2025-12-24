@@ -8,13 +8,14 @@ from typing import Any
 
 from pandas import DataFrame
 
+from freqtrade.exceptions import ConfigurationError
 from freqtrade.exchange import timeframe_to_minutes
 from freqtrade.loggers.set_log_levels import (
     reduce_verbosity_for_bias_tester,
     restore_verbosity_for_bias_tester,
 )
+from freqtrade.optimize.analysis.base_analysis import BaseAnalysis, VarHolder
 from freqtrade.optimize.backtesting import Backtesting
-from freqtrade.optimize.base_analysis import BaseAnalysis, VarHolder
 
 
 logger = logging.getLogger(__name__)
@@ -37,10 +38,13 @@ class RecursiveAnalysis(BaseAnalysis):
 
         self.dict_recursive: dict[str, Any] = dict()
 
+        self.pair_to_used: str | None = None
+        self._strat_scc: int | None = None
+
     # For recursive bias check
     # analyzes two data frames with processed indicators and shows differences between them.
     def analyze_indicators(self):
-        pair_to_check = self.local_config["pairs"][0]
+        pair_to_check = self.pair_to_used
         logger.info("Start checking for recursive bias")
 
         # check and report signals
@@ -85,7 +89,7 @@ class RecursiveAnalysis(BaseAnalysis):
     # For lookahead bias check
     # analyzes two data frames with processed indicators and shows differences between them.
     def analyze_indicators_lookahead(self):
-        pair_to_check = self.local_config["pairs"][0]
+        pair_to_check = self.pair_to_used
         logger.info("Start checking for lookahead bias on indicators only")
 
         part = self.partial_varHolder_lookahead_array[0]
@@ -138,11 +142,25 @@ class RecursiveAnalysis(BaseAnalysis):
 
         backtesting = Backtesting(prepare_data_config, self.exchange)
         self.exchange = backtesting.exchange
+        if self.pair_to_used is None:
+            self.pair_to_used = backtesting.pairlists.whitelist[0]
+            logger.info(
+                f"Using pair {self.pair_to_used} only for recursive analysis. Replacing whitelist."
+            )
         self.local_config["candle_type_def"] = prepare_data_config["candle_type_def"]
+        backtesting.pairlists._whitelist = [self.pair_to_used]
         backtesting._set_strategy(backtesting.strategylist[0])
 
         strat = backtesting.strategy
-        self._strat_scc = strat.startup_candle_count
+        if self._strat_scc is None:
+            self._strat_scc = strat.startup_candle_count
+
+        if self._strat_scc < 1:
+            raise ConfigurationError(
+                f"The strategy defines invalid startup candle count of {self._strat_scc}. "
+                f"This will lead to recursive issues on some indicators. "
+                f"Please define a proper startup_candle_count in the strategy."
+            )
 
         if self._strat_scc not in self._startup_candle:
             self._startup_candle.append(self._strat_scc)

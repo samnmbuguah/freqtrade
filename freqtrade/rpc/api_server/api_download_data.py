@@ -57,11 +57,14 @@ def pairlists_evaluate(
     config_loc = deepcopy(config)
     config_loc["stake_currency"] = ""
     config_loc["pairs"] = payload.pairs
-    config_loc["timerange"] = payload.timerange
+    if payload.timerange:
+        config_loc["timerange"] = payload.timerange
     config_loc["days"] = payload.days
     config_loc["timeframes"] = payload.timeframes
     config_loc["erase"] = payload.erase
     config_loc["download_trades"] = payload.download_trades
+    if payload.candle_types is not None:
+        config_loc["candle_types"] = payload.candle_types
 
     handleExchangePayload(payload, config_loc)
 

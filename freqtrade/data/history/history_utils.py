@@ -6,7 +6,14 @@ from pathlib import Path
 from pandas import DataFrame, concat
 
 from freqtrade.configuration import TimeRange
-from freqtrade.constants import DATETIME_PRINT_FORMAT, DL_DATA_TIMEFRAMES, DOCS_LINK, Config
+from freqtrade.constants import (
+    DATETIME_PRINT_FORMAT,
+    DL_DATA_TIMEFRAMES,
+    DOCS_LINK,
+    Config,
+    ListPairsWithTimeframes,
+    PairWithTimeframe,
+)
 from freqtrade.data.converter import (
     clean_ohlcv_dataframe,
     convert_trades_to_ohlcv,
@@ -17,6 +24,7 @@ from freqtrade.data.history.datahandlers import IDataHandler, get_datahandler
 from freqtrade.enums import CandleType, TradingMode
 from freqtrade.exceptions import OperationalException
 from freqtrade.exchange import Exchange
+from freqtrade.exchange.exchange_utils import date_minus_candles
 from freqtrade.plugins.pairlist.pairlist_helpers import dynamic_expand_pairlist
 from freqtrade.util import dt_now, dt_ts, format_ms_time, format_ms_time_det
 from freqtrade.util.migrations import migrate_data
@@ -97,7 +105,7 @@ def load_data(
     """
     result: dict[str, DataFrame] = {}
     if startup_candles > 0 and timerange:
-        logger.info(f"Using indicator startup period: {startup_candles} ...")
+        logger.debug(f"Using indicator startup period: {startup_candles} ...")
 
     data_handler = get_datahandler(datadir, data_format)
 
@@ -226,6 +234,7 @@ def _download_pair_history(
     candle_type: CandleType,
     erase: bool = False,
     prepend: bool = False,
+    pair_candles: DataFrame | None = None,
 ) -> bool:
     """
     Download latest candles from the exchange for the pair and timeframe passed in parameters
@@ -238,6 +247,7 @@ def _download_pair_history(
     :param timerange: range of time to download
     :param candle_type: Any of the enum CandleType (must match trading mode!)
     :param erase: Erase existing data
+    :param pair_candles: Optional with "1 call" pair candles.
     :return: bool with success state
     """
     data_handler = get_datahandler(datadir, data_handler=data_handler)
@@ -271,21 +281,44 @@ def _download_pair_history(
             "Current End: %s",
             f"{data.iloc[-1]['date']:{DATETIME_PRINT_FORMAT}}" if not data.empty else "None",
         )
-
-        # Default since_ms to 30 days if nothing is given
-        new_dataframe = exchange.get_historic_ohlcv(
-            pair=pair,
-            timeframe=timeframe,
-            since_ms=(
-                since_ms
-                if since_ms
-                else int((datetime.now() - timedelta(days=new_pairs_days)).timestamp()) * 1000
-            ),
-            is_new_pair=data.empty,
-            candle_type=candle_type,
-            until_ms=until_ms if until_ms else None,
+        # used to check if the passed in pair_candles (parallel downloaded) covers since_ms.
+        # If we need more data, we have to fall back to the standard method.
+        pair_candles_since_ms = (
+            dt_ts(pair_candles.iloc[0]["date"])
+            if pair_candles is not None and len(pair_candles.index) > 0
+            else 0
         )
-        logger.info(f"Downloaded data for {pair} with length {len(new_dataframe)}.")
+        if (
+            pair_candles is None
+            or len(pair_candles.index) == 0
+            or data.empty
+            or prepend is True
+            or erase is True
+            or pair_candles_since_ms > (since_ms if since_ms else 0)
+        ):
+            new_dataframe = exchange.get_historic_ohlcv(
+                pair=pair,
+                timeframe=timeframe,
+                since_ms=(
+                    since_ms
+                    if since_ms
+                    else int((datetime.now() - timedelta(days=new_pairs_days)).timestamp()) * 1000
+                ),
+                is_new_pair=data.empty,
+                candle_type=candle_type,
+                until_ms=until_ms if until_ms else None,
+            )
+            logger.info(
+                f"Downloaded data for {pair}, {timeframe}, {candle_type} with length "
+                f"{len(new_dataframe)}."
+            )
+        else:
+            new_dataframe = pair_candles
+            logger.info(
+                f"Downloaded data for {pair}, {timeframe}, {candle_type} with length "
+                f"{len(new_dataframe)}. Parallel Method."
+            )
+
         if data.empty:
             data = new_dataframe
         else:
@@ -320,6 +353,7 @@ def _download_pair_history(
 
 def refresh_backtest_ohlcv_data(
     exchange: Exchange,
+    *,
     pairs: list[str],
     timeframes: list[str],
     datadir: Path,
@@ -330,6 +364,8 @@ def refresh_backtest_ohlcv_data(
     data_format: str | None = None,
     prepend: bool = False,
     progress_tracker: CustomProgress | None = None,
+    candle_types: list[CandleType] | None = None,
+    no_parallel_download: bool = False,
 ) -> list[str]:
     """
     Refresh stored ohlcv data for backtesting and hyperopt operations.
@@ -339,11 +375,46 @@ def refresh_backtest_ohlcv_data(
     progress_tracker = retrieve_progress_tracker(progress_tracker)
 
     pairs_not_available = []
+    fast_candles: dict[PairWithTimeframe, DataFrame] = {}
     data_handler = get_datahandler(datadir, data_format)
-    candle_type = CandleType.get_default(trading_mode)
+    def_candletype = CandleType.SPOT if trading_mode != "futures" else CandleType.FUTURES
+    if trading_mode != "futures":
+        # Ignore user passed candle types for non-futures trading
+        timeframes_with_candletype = [(tf, def_candletype) for tf in timeframes]
+    else:
+        # Filter out SPOT candle type for futures trading
+        candle_types = (
+            [ct for ct in candle_types if ct != CandleType.SPOT] if candle_types else None
+        )
+        fr_candle_type = CandleType.from_string(exchange.get_option("mark_ohlcv_price"))
+        tf_funding_rate = exchange.get_option("funding_fee_timeframe")
+        tf_mark = exchange.get_option("mark_ohlcv_timeframe")
+
+        if candle_types:
+            for ct in candle_types:
+                exchange.verify_candle_type_support(ct)
+            timeframes_with_candletype = [
+                (tf, ct)
+                for ct in candle_types
+                for tf in timeframes
+                if ct != CandleType.FUNDING_RATE
+            ]
+        else:
+            # Default behavior
+            timeframes_with_candletype = [(tf, def_candletype) for tf in timeframes]
+            timeframes_with_candletype.append((tf_mark, fr_candle_type))
+        if not candle_types or CandleType.FUNDING_RATE in candle_types:
+            # All exchanges need FundingRate for futures trading.
+            # The timeframe is aligned to the mark-price timeframe.
+            timeframes_with_candletype.append((tf_funding_rate, CandleType.FUNDING_RATE))
+    # Deduplicate list ...
+    timeframes_with_candletype = list(dict.fromkeys(timeframes_with_candletype))
+    logger.debug(
+        "Downloading %s.", ", ".join(f'"{tf} {ct}"' for tf, ct in timeframes_with_candletype)
+    )
+
     with progress_tracker as progress:
-        tf_length = len(timeframes) if trading_mode != "futures" else len(timeframes) + 2
-        timeframe_task = progress.add_task("Timeframe", total=tf_length)
+        timeframe_task = progress.add_task("Timeframe", total=len(timeframes_with_candletype))
         pair_task = progress.add_task("Downloading data...", total=len(pairs))
 
         for pair in pairs:
@@ -354,8 +425,34 @@ def refresh_backtest_ohlcv_data(
                 pairs_not_available.append(f"{pair}: Pair not available on exchange.")
                 logger.info(f"Skipping pair {pair}...")
                 continue
-            for timeframe in timeframes:
-                progress.update(timeframe_task, description=f"Timeframe {timeframe}")
+            for timeframe, candle_type in timeframes_with_candletype:
+                # Get fast candles via parallel method on first loop through per timeframe
+                # and candle type. Downloads all the pairs in the list and stores them.
+                # Also skips if only 1 pair/timeframe combination is scheduled for download.
+                if (
+                    not no_parallel_download
+                    and (len(pairs) + len(timeframes)) > 2
+                    and exchange.get_option("download_data_parallel_quick", True)
+                    and (
+                        ((pair, timeframe, candle_type) not in fast_candles)
+                        and (erase is False)
+                        and (prepend is False)
+                    )
+                ):
+                    fast_candles.update(
+                        _download_all_pairs_history_parallel(
+                            exchange=exchange,
+                            pairs=pairs,
+                            timeframe=timeframe,
+                            candle_type=candle_type,
+                            timerange=timerange,
+                        )
+                    )
+
+                # get the already downloaded pair candles if they exist
+                pair_candles = fast_candles.pop((pair, timeframe, candle_type), None)
+
+                progress.update(timeframe_task, description=f"Timeframe {timeframe} {candle_type}")
                 logger.debug(f"Downloading pair {pair}, {candle_type}, interval {timeframe}.")
                 _download_pair_history(
                     pair=pair,
@@ -368,40 +465,51 @@ def refresh_backtest_ohlcv_data(
                     candle_type=candle_type,
                     erase=erase,
                     prepend=prepend,
+                    pair_candles=pair_candles,  # optional pass of dataframe of parallel candles
                 )
                 progress.update(timeframe_task, advance=1)
-            if trading_mode == "futures":
-                # Predefined candletype (and timeframe) depending on exchange
-                # Downloads what is necessary to backtest based on futures data.
-                tf_mark = exchange.get_option("mark_ohlcv_timeframe")
-                tf_funding_rate = exchange.get_option("funding_fee_timeframe")
-
-                fr_candle_type = CandleType.from_string(exchange.get_option("mark_ohlcv_price"))
-                # All exchanges need FundingRate for futures trading.
-                # The timeframe is aligned to the mark-price timeframe.
-                combs = ((CandleType.FUNDING_RATE, tf_funding_rate), (fr_candle_type, tf_mark))
-                for candle_type_f, tf in combs:
-                    logger.debug(f"Downloading pair {pair}, {candle_type_f}, interval {tf}.")
-                    _download_pair_history(
-                        pair=pair,
-                        datadir=datadir,
-                        exchange=exchange,
-                        timerange=timerange,
-                        data_handler=data_handler,
-                        timeframe=str(tf),
-                        new_pairs_days=new_pairs_days,
-                        candle_type=candle_type_f,
-                        erase=erase,
-                        prepend=prepend,
-                    )
-                    progress.update(
-                        timeframe_task, advance=1, description=f"Timeframe {candle_type_f}, {tf}"
-                    )
 
             progress.update(pair_task, advance=1)
             progress.update(timeframe_task, description="Timeframe")
 
     return pairs_not_available
+
+
+def _download_all_pairs_history_parallel(
+    exchange: Exchange,
+    pairs: list[str],
+    timeframe: str,
+    candle_type: CandleType,
+    timerange: TimeRange | None = None,
+) -> dict[PairWithTimeframe, DataFrame]:
+    """
+    Allows to use the faster parallel async download method for many coins
+    but only if the data is short enough to be retrieved in one call.
+    Used by freqtrade download-data subcommand.
+    :return: Candle pairs with timeframes
+    """
+    candles: dict[PairWithTimeframe, DataFrame] = {}
+    since: int | None = None
+    if timerange:
+        if timerange.starttype == "date":
+            since = timerange.startts * 1000
+
+    candle_limit = exchange.ohlcv_candle_limit(timeframe, candle_type)
+    one_call_min_time_dt = dt_ts(date_minus_candles(timeframe, candle_limit))
+    # check if we can get all candles in one go, if so then we can download them in parallel
+    if since is None or since > one_call_min_time_dt:
+        logger.info(
+            f"Downloading parallel candles for {timeframe} for all pairs"
+            f" since {format_ms_time(since)}"
+            if since
+            else "."
+        )
+        needed_pairs: ListPairsWithTimeframes = [
+            (p, timeframe, candle_type) for p in [p for p in pairs]
+        ]
+        candles = exchange.refresh_latest_ohlcv(needed_pairs, since_ms=since, cache=False)
+
+    return candles
 
 
 def _download_trades_history(
@@ -602,6 +710,9 @@ def download_data(
     """
     Download data function. Used from both cli and API.
     """
+    exchange.validate_trading_mode_and_margin_mode(
+        config.get("trading_mode", TradingMode.SPOT), None, allow_none_margin_mode=True
+    )
     timerange = TimeRange()
     if "days" in config and config["days"] is not None:
         time_since = (datetime.now() - timedelta(days=config["days"])).strftime("%Y%m%d")
@@ -702,6 +813,8 @@ def download_data(
                 trading_mode=config.get("trading_mode", "spot"),
                 prepend=config.get("prepend_data", False),
                 progress_tracker=progress_tracker,
+                candle_types=config.get("candle_types"),
+                no_parallel_download=config.get("no_parallel_download", False),
             )
     finally:
         if pairs_not_available:

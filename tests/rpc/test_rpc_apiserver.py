@@ -5,6 +5,7 @@ Unit test file for rpc/api_server.py
 import asyncio
 import logging
 import time
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, PropertyMock
@@ -355,7 +356,7 @@ def test_api__init__(default_conf, mocker):
     apiserver = ApiServer(default_conf)
     apiserver.add_rpc_handler(RPC(get_patched_freqtradebot(mocker, default_conf)))
     assert apiserver._config == default_conf
-    with pytest.raises(OperationalException, match="RPC Handler already attached."):
+    with pytest.raises(OperationalException, match=r"RPC Handler already attached\."):
         apiserver.add_rpc_handler(RPC(get_patched_freqtradebot(mocker, default_conf)))
 
     apiserver.cleanup()
@@ -534,7 +535,7 @@ def test_api_reloadconf(botclient):
 
 
 def test_api_pause(botclient):
-    ftbot, client = botclient
+    _ftbot, client = botclient
 
     rc = client_post(client, f"{BASE_URI}/pause")
     assert_response(rc)
@@ -1033,8 +1034,7 @@ def test_api_delete_trade(botclient, mocker, fee, markets, is_short):
     stoploss_mock = MagicMock()
     cancel_mock = MagicMock()
     mocker.patch.multiple(
-        EXMS,
-        markets=PropertyMock(return_value=markets),
+        ftbot.exchange,
         cancel_order=cancel_mock,
         cancel_stoploss_order=stoploss_mock,
     )
@@ -1604,6 +1604,8 @@ def test_api_status(
         "precision_mode": None,
         "orders": [ANY],
         "has_open_orders": True,
+        "nr_of_successful_entries": ANY,
+        "nr_of_successful_exits": ANY,
     }
 
     mocker.patch(
@@ -1816,6 +1818,8 @@ def test_api_force_entry(botclient, mocker, fee, endpoint):
         "price_precision": None,
         "precision_mode": None,
         "has_open_orders": False,
+        "nr_of_successful_entries": ANY,
+        "nr_of_successful_exits": ANY,
         "orders": [],
     }
 
@@ -1848,7 +1852,33 @@ def test_api_forceexit(botclient, mocker, ticker, fee, markets):
     Trade.rollback()
 
     trade = Trade.get_trades([Trade.id == 5]).first()
+    last_order = trade.orders[-1]
+
+    assert last_order.side == "sell"
+    assert last_order.status == "closed"
+    assert last_order.order_type == "market"
+    assert last_order.amount == 23
     assert pytest.approx(trade.amount) == 100
+    assert trade.is_open is True
+
+    # Test with explicit price
+    rc = client_post(
+        client,
+        f"{BASE_URI}/forceexit",
+        data={"tradeid": "5", "ordertype": "limit", "amount": 25, "price": 0.12345},
+    )
+    assert_response(rc)
+    assert rc.json() == {"result": "Created exit order for trade 5."}
+    Trade.rollback()
+
+    trade = Trade.get_trades([Trade.id == 5]).first()
+    last_order = trade.orders[-1]
+    assert last_order.status == "closed"
+    assert last_order.order_type == "limit"
+    assert pytest.approx(last_order.safe_price) == 0.12345
+    assert pytest.approx(last_order.amount) == 25
+
+    assert pytest.approx(trade.amount) == 75
     assert trade.is_open is True
 
     rc = client_post(client, f"{BASE_URI}/forceexit", data={"tradeid": "5"})
@@ -1860,7 +1890,42 @@ def test_api_forceexit(botclient, mocker, ticker, fee, markets):
     assert trade.is_open is False
 
 
-def test_api_pair_candles(botclient, ohlcv_history):
+def gen_annotation_params():
+    area_annotation = {
+        "type": "area",
+        "start": "2024-01-01 15:00:00",
+        "end": "2024-01-01 16:00:00",
+        "y_start": 94000.2,
+        "y_end": 98000,
+        "color": "",
+        "label": "some label",
+    }
+    line_annotation = {
+        "type": "line",
+        "start": "2024-01-01 15:00:00",
+        "end": "2024-01-01 16:00:00",
+        "y_start": 99000.2,
+        "y_end": 98000,
+        "color": "",
+        "label": "some label",
+        "width": 2,
+        "line_style": "dashed",
+    }
+
+    line_wrong = deepcopy(line_annotation)
+    line_wrong["line_style"] = "dashed2222"
+    return [
+        ([area_annotation], [area_annotation]),  # Only area
+        ([line_annotation], [line_annotation]),  # Only line
+        ([area_annotation, line_annotation], [area_annotation, line_annotation]),  # Both together
+        ([], []),  # Empty
+        ([line_wrong], []),  # Invalid line
+        ([area_annotation, line_wrong], [area_annotation]),  # Invalid line
+    ]
+
+
+@pytest.mark.parametrize("annotations,expected", gen_annotation_params())
+def test_api_pair_candles(botclient, ohlcv_history, annotations, expected):
     ftbot, client = botclient
     timeframe = "5m"
     amount = 3
@@ -1892,18 +1957,7 @@ def test_api_pair_candles(botclient, ohlcv_history):
     ohlcv_history["exit_short"] = 0
 
     ftbot.dataprovider._set_cached_df("XRP/BTC", timeframe, ohlcv_history, CandleType.SPOT)
-    fake_plot_annotations = [
-        {
-            "type": "area",
-            "start": "2024-01-01 15:00:00",
-            "end": "2024-01-01 16:00:00",
-            "y_start": 94000.2,
-            "y_end": 98000,
-            "color": "",
-            "label": "some label",
-        }
-    ]
-    plot_annotations_mock = MagicMock(return_value=fake_plot_annotations)
+    plot_annotations_mock = MagicMock(return_value=annotations)
     ftbot.strategy.plot_annotations = plot_annotations_mock
     for call in ("get", "post"):
         plot_annotations_mock.reset_mock()
@@ -1936,7 +1990,7 @@ def test_api_pair_candles(botclient, ohlcv_history):
         assert resp["data_start_ts"] == 1511686200000
         assert resp["data_stop"] == "2017-11-26 09:00:00+00:00"
         assert resp["data_stop_ts"] == 1511686800000
-        assert resp["annotations"] == fake_plot_annotations
+        assert resp["annotations"] == expected
         assert plot_annotations_mock.call_count == 1
         assert isinstance(resp["columns"], list)
         base_cols = {
@@ -2729,12 +2783,12 @@ def test_list_available_pairs(botclient):
     rc = client_get(client, f"{BASE_URI}/available_pairs")
 
     assert_response(rc)
-    assert rc.json()["length"] == 12
+    assert rc.json()["length"] == 14
     assert isinstance(rc.json()["pairs"], list)
 
     rc = client_get(client, f"{BASE_URI}/available_pairs?timeframe=5m")
     assert_response(rc)
-    assert rc.json()["length"] == 12
+    assert rc.json()["length"] == 14
 
     rc = client_get(client, f"{BASE_URI}/available_pairs?stake_currency=ETH")
     assert_response(rc)
@@ -3222,6 +3276,7 @@ def test_api_download_data(botclient, mocker, tmp_path):
     body = {
         "pairs": ["ETH/BTC", "XRP/BTC"],
         "timeframes": ["5m"],
+        "candle_types": ["spot"],
     }
 
     # Fail, already running
@@ -3281,7 +3336,7 @@ def test_api_download_data(botclient, mocker, tmp_path):
 
 
 def test_api_markets_live(botclient):
-    ftbot, client = botclient
+    _ftbot, client = botclient
 
     rc = client_get(client, f"{BASE_URI}/markets")
     assert_response(rc, 200)

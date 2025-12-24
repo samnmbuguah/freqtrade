@@ -2,6 +2,10 @@
 
 This page combines common gotchas and Information which are exchange-specific and most likely don't apply to other exchanges.
 
+## Quick overview of supported exchange features
+
+--8<-- "includes/exchange-features.md"
+
 ## Exchange configuration
 
 Freqtrade is based on [CCXT library](https://github.com/ccxt/ccxt) that supports over 100 cryptocurrency
@@ -294,7 +298,14 @@ Without these permissions, the bot will not start correctly and show errors like
 
 Bybit supports [time_in_force](configuration.md#understand-order_time_in_force) with settings "GTC" (good till cancelled), "FOK" (full-or-cancel), "IOC" (immediate-or-cancel) and "PO" (Post only) settings.
 
-Futures trading on bybit is currently supported for isolated futures mode.
+!!! Warning "Unified accounts"
+    Freqtrade assumes accounts to be dedicated to the bot.
+    We therefore recommend the usage of one subaccount per bot. This is especially important when using unified accounts.  
+    Other configurations (multiple bots on one account, manual non-bot trades on the bot account) are not supported and may lead to unexpected behavior.
+
+### Bybit Futures
+
+Futures trading on bybit is supported for isolated futures mode.
 
 On startup, freqtrade will set the position mode to "One-way Mode" for the whole (sub)account. This avoids making this call over and over again (slowing down bot operations), but means that manual changes to this setting may result in exceptions and errors.
 
@@ -308,10 +319,6 @@ API Keys for live futures trading must have the following permissions:
 
 We do strongly recommend to limit all API keys to the IP you're going to use it from.
 
-!!! Warning "Unified accounts"
-    Freqtrade assumes accounts to be dedicated to the bot.
-    We therefore recommend the usage of one subaccount per bot. This is especially important when using unified accounts.  
-    Other configurations (multiple bots on one account, manual non-bot trades on the bot account) are not supported and may lead to unexpected behavior.
 
 ## Bitmart
 
@@ -350,6 +357,12 @@ Bitget supports [time_in_force](configuration.md#understand-order_time_in_force)
 !!! Tip "Stoploss on Exchange"
     Bitget supports `stoploss_on_exchange` and can use both stop-loss-market and stop-loss-limit orders. It provides great advantages, so we recommend to benefit from it.
     You can use either `"limit"` or `"market"` in the `order_types.stoploss` configuration setting to decide which type of stoploss shall be used.
+
+### Bitget Futures
+
+Futures trading on bitget is supported for isolated futures mode.
+
+On startup, freqtrade will set the position mode to "One-way Mode" for the whole (sub)account. This avoids making this call over and over again (slowing down bot operations), but means that manual changes to this setting may result in exceptions and errors.
 
 ## Hyperliquid
 
@@ -394,11 +407,12 @@ To use these with Freqtrade, you will need to use the following configuration pa
 ``` json
 "exchange": {
     "name": "hyperliquid",
-    "walletAddress": "your_vault_address",  // Vault or subaccount address
-    "privateKey": "your_api_private_key",
+    "walletAddress": "your_master_wallet_address", // Your master wallet address (not the API wallet address and not the vault/subaccount address).
+    "privateKey": "your_api_private_key", // API wallet private key (see https://app.hyperliquid.xyz/API). You'll only need the private key.
     "ccxt_config": {
         "options": {
-            "vaultAddress": "your_vault_address" // Optional, only if you want to use a vault or subaccount
+            "vaultAddress": "your_vault_address", // Optional, only if you want to use a vault ...
+            "subAccountAddress": "your_subaccount_address" // OR optional, only if you want to use a subaccount
         }
     },
     // ...
@@ -406,6 +420,9 @@ To use these with Freqtrade, you will need to use the following configuration pa
 ```
 
 Your balance and trades will now be used from your vault / subaccount - and no longer from your main account.
+
+!!! Note
+    You can only use either a vault or a subaccount - not both at the same time.
 
 ### Historic Hyperliquid data
 
@@ -474,3 +491,5 @@ For example, to test the order type `FOK` with Kraken, and modify candle limit t
 
 !!! Warning
     Please make sure to fully understand the impacts of these settings before modifying them.
+    Using `_ft_has_params` overrides may lead to unexpected behavior, and may even break your bot. 
+    We will not be able to provide support for issues caused by custom settings in `_ft_has_params`.

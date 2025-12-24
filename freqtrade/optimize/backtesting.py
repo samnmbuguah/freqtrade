@@ -124,8 +124,9 @@ class Backtesting:
         self.trade_id_counter: int = 0
         self.order_id_counter: int = 0
 
-        config["dry_run"] = True
+        self.config["dry_run"] = True
         self.price_pair_prec: dict[str, Series] = {}
+        self.available_pairs: list[str] = []
         self.run_ids: dict[str, str] = {}
         self.strategylist: list[IStrategy] = []
         self.all_bt_content: dict[str, BacktestContentType] = {}
@@ -137,6 +138,7 @@ class Backtesting:
         self.rejected_dict: dict[str, list] = {}
 
         self._exchange_name = self.config["exchange"]["name"]
+        self.__initial_backtest = exchange is None
         if not exchange:
             exchange = ExchangeResolver.load_exchange(self.config, load_leverage_tiers=True)
         self.exchange = exchange
@@ -175,24 +177,12 @@ class Backtesting:
         self._validate_pairlists_for_backtesting()
 
         self.dataprovider.add_pairlisthandler(self.pairlists)
-        self.pairlists.refresh_pairlist()
+        self.dynamic_pairlist: bool = self.config.get("enable_dynamic_pairlist", False)
+        self.pairlists.refresh_pairlist(only_first=self.dynamic_pairlist)
 
         if len(self.pairlists.whitelist) == 0:
             raise OperationalException("No pair in whitelist.")
-
-        if config.get("fee", None) is not None:
-            self.fee = config["fee"]
-            logger.info(f"Using fee {self.fee:.4%} from config.")
-        else:
-            fees = [
-                self.exchange.get_fee(
-                    symbol=self.pairlists.whitelist[0],
-                    taker_or_maker=mt,  # type: ignore
-                )
-                for mt in ("taker", "maker")
-            ]
-            self.fee = max(fee for fee in fees if fee is not None)
-            logger.info(f"Using fee {self.fee:.4%} - worst case fee from exchange (lowest tier).")
+        self.set_fee()
         self.precision_mode = self.exchange.precisionMode
         self.precision_mode_price = self.exchange.precision_mode_price
 
@@ -217,8 +207,8 @@ class Backtesting:
             # This value should NOT be written to startup_candle_count
             self.required_startup = self.dataprovider.get_required_startup(self.timeframe)
 
-        self.trading_mode: TradingMode = config.get("trading_mode", TradingMode.SPOT)
-        self.margin_mode: MarginMode = config.get("margin_mode", MarginMode.ISOLATED)
+        self.trading_mode: TradingMode = self.config.get("trading_mode", TradingMode.SPOT)
+        self.margin_mode: MarginMode = self.config.get("margin_mode", MarginMode.ISOLATED)
         # strategies which define "can_short=True" will fail to load in Spot mode.
         self._can_short = self.trading_mode != TradingMode.SPOT
         self._position_stacking: bool = self.config.get("position_stacking", False)
@@ -237,6 +227,30 @@ class Backtesting:
             raise OperationalException(
                 "PrecisionFilter not allowed for backtesting multiple strategies."
             )
+
+    def log_once(self, msg: str) -> None:
+        """
+        Partial reimplementation of log_once from the Login mixin.
+        only used by recursive, as __initial_backtest is false in all other cases.
+
+        """
+        if self.__initial_backtest:
+            logger.info(msg)
+
+    def set_fee(self):
+        if self.config.get("fee", None) is not None:
+            self.fee = self.config["fee"]
+            self.log_once(f"Using fee {self.fee:.4%} from config.")
+        else:
+            fees = [
+                self.exchange.get_fee(
+                    symbol=self.pairlists.whitelist[0],
+                    taker_or_maker=mt,
+                )
+                for mt in ("taker", "maker")
+            ]
+            self.fee = max(fee for fee in fees if fee is not None)
+            self.log_once(f"Using fee {self.fee:.4%} - worst case fee from exchange (lowest tier).")
 
     @staticmethod
     def cleanup():
@@ -260,7 +274,7 @@ class Backtesting:
         self.futures_data: dict[str, DataFrame] = {}
 
     def init_backtest(self):
-        self.prepare_backtest(False)
+        self.reset_backtest(False)
 
         self.wallets = Wallets(self.config, self.exchange, is_backtest=True)
 
@@ -322,10 +336,12 @@ class Backtesting:
         self.progress.set_new_value(1)
         self._load_bt_data_detail()
         self.price_pair_prec = {}
+
         for pair in self.pairlists.whitelist:
             if pair in data:
                 # Load price precision logic
                 self.price_pair_prec[pair] = get_tick_size_over_time(data[pair])
+                self.available_pairs.append(pair)
         return data, self.timerange
 
     def _load_bt_data_detail(self) -> None:
@@ -358,6 +374,7 @@ class Backtesting:
                 timerange=self.timerange,
                 startup_candles=0,
                 fail_without_data=True,
+                fill_up_missing=False,
                 data_format=self.config["dataformat_ohlcv"],
                 candle_type=CandleType.FUNDING_RATE,
             )
@@ -414,7 +431,7 @@ class Backtesting:
     def disable_database_use(self):
         disable_database_use(self.timeframe)
 
-    def prepare_backtest(self, enable_protections):
+    def reset_backtest(self, enable_protections: bool = False):
         """
         Backtesting setup method - called once for every call to "backtest()".
         """
@@ -954,7 +971,7 @@ class Backtesting:
                     )
                 )
 
-    def get_valid_price_and_stake(
+    def get_valid_entry_price_and_stake(
         self,
         pair: str,
         row: tuple,
@@ -1077,18 +1094,20 @@ class Backtesting:
         stake_amount_ = stake_amount or (trade.stake_amount if trade else 0.0)
         precision_price, precision_mode_price = self.get_pair_precision(pair, current_time)
 
-        propose_rate, stake_amount, leverage, min_stake_amount = self.get_valid_price_and_stake(
-            pair,
-            row,
-            row[OPEN_IDX],
-            stake_amount_,
-            direction,
-            current_time,
-            entry_tag,
-            trade,
-            order_type,
-            precision_price,
-            precision_mode_price,
+        propose_rate, stake_amount, leverage, min_stake_amount = (
+            self.get_valid_entry_price_and_stake(
+                pair,
+                row,
+                row[OPEN_IDX],
+                stake_amount_,
+                direction,
+                current_time,
+                entry_tag,
+                trade,
+                order_type,
+                precision_price,
+                precision_mode_price,
+            )
         )
 
         # replace proposed rate if another rate was requested
@@ -1570,6 +1589,11 @@ class Backtesting:
         for current_time in self._time_generator(start_date, end_date):
             # Loop for each main candle.
             self.check_abort()
+
+            if self.dynamic_pairlist and self.pairlists:
+                self.pairlists.refresh_pairlist(pairs=self.available_pairs)
+                pairs = self.pairlists.whitelist
+
             # Reset open trade count for this candle
             # Critical to avoid exceeding max_open_trades in backtesting
             # when timeframe-detail is used and trades close within the opening candle.
@@ -1672,7 +1696,7 @@ class Backtesting:
         :param end_date: backtesting timerange end datetime
         :return: DataFrame with trades (results of backtesting)
         """
-        self.prepare_backtest(self.enable_protections)
+        self.reset_backtest(self.enable_protections)
         # Ensure wallets are up-to-date (important for --strategy-list)
         self.wallets.update()
         # Use dict of lists with data for performance

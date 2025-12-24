@@ -26,22 +26,18 @@ These modes can be configured with these values:
 Stoploss on exchange is only supported for the following exchanges, and not all exchanges support both stop-limit and stop-market.
 The Order-type will be ignored if only one mode is available.
 
-| Exchange | stop-loss type |
-|----------|-------------|
-| Binance  | limit |
-| Binance Futures  | market, limit |
-| Bingx    | market, limit |
-| Bitget   | market, limit |
-| HTX      | limit |
-| kraken   | market, limit |
-| Gate     | limit |
-| Okx      | limit |
-| Kucoin   | stop-limit, stop-market|
-| Hyperliquid (futures only)   | limit |
+??? info "Supported exchanges and stoploss types"
+    
+    --8<-- "includes/exchange-features.md"
 
 !!! Note "Tight stoploss"
-    <ins>Do not set too low/tight stoploss value when using stop loss on exchange!</ins>  
+    Do not set too low/tight stoploss value when using stop loss on exchange!  
     If set to low/tight you will have greater risk of missing fill on the order and stoploss will not work.
+
+!!! Warning "Loose stoploss"
+    Using stoploss on exchange with a very wide stoploss (e.g. -1) may fail to place the stoploss order on exchange due to exchange limitations.
+    In that case, the bot will fallback to using the `emergency_exit` order type to place a market order as placing the stoploss order failed.
+    Freqtrade currently does not implement a limitation to avoid this situation, so please ensure your stoploss values are within reasonable limits for your exchange or disable stoploss on exchange.
 
 ### stoploss_on_exchange and stoploss_on_exchange_limit_ratio
 

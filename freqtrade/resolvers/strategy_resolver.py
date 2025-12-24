@@ -87,7 +87,7 @@ class StrategyResolver(IResolver):
         # Loop this list again to have output combined
         for attribute, _ in attributes:
             if attribute in config:
-                logger.info("Strategy using %s: %s", attribute, config[attribute])
+                logger.info(f"Strategy using {attribute}: {config[attribute]}")
 
         StrategyResolver._normalize_attributes(strategy)
 
@@ -109,9 +109,8 @@ class StrategyResolver(IResolver):
             # Ensure Properties are not overwritten
             setattr(strategy, attribute, config[attribute])
             logger.info(
-                "Override strategy '%s' with value in config file: %s.",
-                attribute,
-                config[attribute],
+                f"Override strategy '{attribute}' with value from the configuration: "
+                f"{config[attribute]}.",
             )
         elif hasattr(strategy, attribute):
             val = getattr(strategy, attribute)
@@ -151,7 +150,9 @@ class StrategyResolver(IResolver):
         # Ensure necessary migrations are performed first.
         validate_migrated_strategy_settings(strategy.config)
 
-        if not all(k in strategy.order_types for k in REQUIRED_ORDERTYPES):
+        if not strategy.order_types or not all(
+            k in strategy.order_types for k in REQUIRED_ORDERTYPES
+        ):
             raise ImportError(
                 f"Impossible to load Strategy '{strategy.__class__.__name__}'. "
                 f"Order-types mapping is incomplete."

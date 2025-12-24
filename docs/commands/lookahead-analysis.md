@@ -1,4 +1,4 @@
-```
+``` output
 usage: freqtrade lookahead-analysis [-h] [-v] [--no-color] [--logfile FILE]
                                     [-V] [-c PATH] [-d PATH] [--userdir PATH]
                                     [-s NAME] [--strategy-path PATH]
@@ -11,6 +11,7 @@ usage: freqtrade lookahead-analysis [-h] [-v] [--no-color] [--logfile FILE]
                                     [--stake-amount STAKE_AMOUNT]
                                     [--fee FLOAT] [-p PAIRS [PAIRS ...]]
                                     [--enable-protections]
+                                    [--enable-dynamic-pairlist]
                                     [--dry-run-wallet DRY_RUN_WALLET]
                                     [--timeframe-detail TIMEFRAME_DETAIL]
                                     [--strategy-list STRATEGY_LIST [STRATEGY_LIST ...]]
@@ -21,10 +22,11 @@ usage: freqtrade lookahead-analysis [-h] [-v] [--no-color] [--logfile FILE]
                                     [--minimum-trade-amount INT]
                                     [--targeted-trade-amount INT]
                                     [--lookahead-analysis-exportfilename LOOKAHEAD_ANALYSIS_EXPORTFILENAME]
+                                    [--allow-limit-orders]
 
 options:
   -h, --help            show this help message and exit
-  -i TIMEFRAME, --timeframe TIMEFRAME
+  -i, --timeframe TIMEFRAME
                         Specify timeframe (`1m`, `5m`, `30m`, `1h`, `1d`).
   --timerange TIMERANGE
                         Specify what timerange of data to use.
@@ -39,14 +41,19 @@ options:
                         setting.
   --fee FLOAT           Specify fee ratio. Will be applied twice (on trade
                         entry and exit).
-  -p PAIRS [PAIRS ...], --pairs PAIRS [PAIRS ...]
+  -p, --pairs PAIRS [PAIRS ...]
                         Limit command to these pairs. Pairs are space-
                         separated.
   --enable-protections, --enableprotections
-                        Enable protections for backtesting.Will slow
+                        Enable protections for backtesting. Will slow
                         backtesting down by a considerable amount, but will
                         include configured protections
-  --dry-run-wallet DRY_RUN_WALLET, --starting-balance DRY_RUN_WALLET
+  --enable-dynamic-pairlist
+                        Enables dynamic pairlist refreshes in backtesting. The
+                        pairlist will be generated for each new candle if
+                        you're using a pairlist handler that supports this
+                        feature, for example, ShuffleFilter.
+  --dry-run-wallet, --starting-balance DRY_RUN_WALLET
                         Starting balance, used for backtesting / hyperopt and
                         dry-runs.
   --timeframe-detail TIMEFRAME_DETAIL
@@ -61,13 +68,13 @@ options:
                         becomes `backtest-data-SampleStrategy.json`
   --export {none,trades,signals}
                         Export backtest results (default: trades).
-  --backtest-filename PATH, --export-filename PATH
+  --backtest-filename, --export-filename PATH
                         Use this filename for backtest results.Example:
                         `--backtest-
                         filename=backtest_results_2020-09-27_16-20-48.json`.
                         Assumes either `user_data/backtest_results/` or
                         `--export-directory` as base directory.
-  --backtest-directory PATH, --export-directory PATH
+  --backtest-directory, --export-directory PATH
                         Directory to use for backtest results. Example:
                         `--export-directory=user_data/backtest_results/`.
   --freqai-backtest-live-models
@@ -79,31 +86,31 @@ options:
   --lookahead-analysis-exportfilename LOOKAHEAD_ANALYSIS_EXPORTFILENAME
                         Use this csv-filename to store lookahead-analysis-
                         results
+  --allow-limit-orders  Allow limit orders in lookahead analysis (could cause
+                        false positives in lookahead analysis results).
 
 Common arguments:
   -v, --verbose         Verbose mode (-vv for more, -vvv to get all messages).
   --no-color            Disable colorization of hyperopt results. May be
                         useful if you are redirecting output to a file.
-  --logfile FILE, --log-file FILE
+  --logfile, --log-file FILE
                         Log to the file specified. Special values are:
                         'syslog', 'journald'. See the documentation for more
                         details.
   -V, --version         show program's version number and exit
-  -c PATH, --config PATH
-                        Specify configuration file (default:
+  -c, --config PATH     Specify configuration file (default:
                         `userdir/config.json` or `config.json` whichever
                         exists). Multiple --config options may be used. Can be
                         set to `-` to read config from stdin.
-  -d PATH, --datadir PATH, --data-dir PATH
+  -d, --datadir, --data-dir PATH
                         Path to the base directory of the exchange with
                         historical backtesting data. To see futures data, use
                         trading-mode additionally.
-  --userdir PATH, --user-data-dir PATH
+  --userdir, --user-data-dir PATH
                         Path to userdata directory.
 
 Strategy arguments:
-  -s NAME, --strategy NAME
-                        Specify strategy class name which will be used by the
+  -s, --strategy NAME   Specify strategy class name which will be used by the
                         bot.
   --strategy-path PATH  Specify additional strategy lookup path.
   --recursive-strategy-search
