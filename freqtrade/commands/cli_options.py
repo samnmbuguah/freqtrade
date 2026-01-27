@@ -2,7 +2,7 @@
 Definition of cli arguments used in arguments.py
 """
 
-from argparse import ArgumentTypeError
+from argparse import SUPPRESS, ArgumentTypeError
 
 from freqtrade import constants
 from freqtrade.constants import (
@@ -180,7 +180,11 @@ AVAILABLE_CLI_OPTIONS = {
     "position_stacking": Arg(
         "--eps",
         "--enable-position-stacking",
-        help="Allow buying the same pair multiple times (position stacking).",
+        help=(
+            "Allow buying the same pair multiple times (position stacking). "
+            "Only applicable to backtesting and hyperopt. "
+            "Results archived by this cannot be reproduced in dry/live trading."
+        ),
         action="store_true",
         default=False,
     ),
@@ -382,6 +386,13 @@ AVAILABLE_CLI_OPTIONS = {
     "dex_exchanges": Arg(
         "--dex-exchanges",
         help="Print only DEX exchanges.",
+        action="store_true",
+    ),
+    "list_exchanges_futures_options": Arg(
+        "--ccxt-show-futures-options-exchanges",
+        help=SUPPRESS,
+        # Show compatibility with ccxt for futures functionality
+        # Doesn't show in help as it's an internal/debug option.
         action="store_true",
     ),
     # List pairs / markets
