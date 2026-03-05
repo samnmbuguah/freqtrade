@@ -26,14 +26,26 @@ services:
       - 1.1.1.1
     volumes:
       - "./user_data:/freqtrade/user_data"
-    # Expose api on port 8080 (localhost only)
-    # Please read the https://www.freqtrade.io/en/stable/rest-api/ documentation
-    # for more information.
     ports:
       - "8080:8080"
-    # Default command used when running `docker compose up`
     command: >
       trade --logfile /freqtrade/user_data/logs/freqtrade.log --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite --config /freqtrade/user_data/config.json --strategy LiquidityGoblin
+    networks:
+      - screencoins_default
+
+  freqtrade_1m:
+    image: freqtradeorg/freqtrade:stable
+    restart: unless-stopped
+    container_name: freqtrade_1m
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+    ports:
+      - "8081:8081"
+    command: >
+      trade --logfile /freqtrade/user_data/logs/freqtrade_1m.log --db-url sqlite:////freqtrade/user_data/tradesv3_1m.sqlite --config /freqtrade/user_data/config_1m.json --strategy LiquidityGoblin1m
     networks:
       - screencoins_default
 
