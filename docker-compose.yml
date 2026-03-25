@@ -26,6 +26,7 @@ services:
       - 1.1.1.1
     volumes:
       - "./user_data:/freqtrade/user_data"
+      - "./freqtrade:/freqtrade/freqtrade"
     ports:
       - "8080:8080"
     command: >
@@ -42,6 +43,7 @@ services:
       - 1.1.1.1
     volumes:
       - "./user_data:/freqtrade/user_data"
+      - "./freqtrade:/freqtrade/freqtrade"
     ports:
       - "8081:8081"
     command: >
@@ -58,6 +60,7 @@ services:
       - 1.1.1.1
     volumes:
       - "./user_data:/freqtrade/user_data"
+      - "./freqtrade:/freqtrade/freqtrade"
     ports:
       - "8083:8083"
     command: >
