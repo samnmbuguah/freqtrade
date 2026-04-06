@@ -875,7 +875,7 @@ class RPC:
         for symbol, pos in self._freqtrade.wallets.get_all_positions().items():
             est_stake = pos.collateral
             pos_base = self._freqtrade.exchange.get_pair_base_currency(symbol)
-            if pos.leverage:
+            if pos.leverage and pos.position:
                 try:
                     rate = self._freqtrade.exchange.get_conversion_rate(pos_base, stake_currency)
                     if rate:
@@ -1736,8 +1736,24 @@ class RPC:
 
     @staticmethod
     def _rpc_sysinfo() -> dict[str, Any]:
+        cpu_pct = psutil.cpu_percent(interval=0.1, percpu=True)
+        load_avg = psutil.getloadavg()
         return {
-            "cpu_pct": psutil.cpu_percent(interval=1, percpu=True),
+            "cpu_pct": cpu_pct,  # Deprecated, use cpu_load instead
+            "cpu_load": [
+                {
+                    "cpu": idx,
+                    "pct": pct,
+                }
+                for idx, pct in enumerate(cpu_pct)
+            ],
+            "cpu_avg": sum(cpu_pct) / len(cpu_pct) if cpu_pct else 0.0,
+            "cpu_load_avg": {
+                "1m": load_avg[0],
+                "5m": load_avg[1],
+                "15m": load_avg[2],
+            },
+            "cpu_count": len(cpu_pct),
             "ram_pct": psutil.virtual_memory().percent,
         }
 

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import ccxt
 
 from freqtrade.constants import BuySell
-from freqtrade.enums import OPTIMIZE_MODES, CandleType, MarginMode, TradingMode
+from freqtrade.enums import OPTIMIZE_MODES, CandleType, MarginMode, PriceType, TradingMode
 from freqtrade.exceptions import (
     DDosProtection,
     OperationalException,
@@ -38,6 +38,11 @@ class Bitget(Exchange):
     _ft_has_futures: FtHas = {
         "funding_fee_candle_limit": 100,
         "has_delisting": True,
+        "stop_price_type_field": "triggerType",
+        "stop_price_type_value_mapping": {
+            PriceType.LAST: "fill_price",
+            PriceType.MARK: "mark_price",
+        },
     }
 
     _supported_trading_mode_margin_pairs: list[tuple[TradingMode, MarginMode]] = [
