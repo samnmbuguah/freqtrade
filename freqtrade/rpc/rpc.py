@@ -12,7 +12,7 @@ import psutil
 from dateutil.relativedelta import relativedelta
 from dateutil.tz import tzlocal
 from numpy import inf, int64, isnan, mean, nan
-from pandas import DataFrame, NaT
+from pandas import DataFrame, NaT, read_sql
 from sqlalchemy import func, select
 
 from freqtrade import __version__
@@ -176,6 +176,7 @@ class RPC:
                 timeframe_to_minutes(config["timeframe"]) if "timeframe" in config else 0
             ),
             "exchange": config["exchange"]["name"],
+            "demo_trading": config["exchange"].get("demo_trading", False),
             "strategy": config["strategy"],
             "force_entry_enable": config.get("force_entry_enable", False),
             "exit_pricing": config.get("exit_pricing", {}),
@@ -785,6 +786,26 @@ class RPC:
             "bot_start_date": format_date(bot_start),
         }
 
+    def _rpc_get_historic_balance(self) -> tuple[DataFrame, int]:
+        """
+        Returns the historic balance of the bot
+        :return: DataFrame with the balance history and the timestamp of the migration
+        """
+        results = read_sql("wallet_history", con=Trade.session.bind, parse_dates=["timestamp"])
+
+        results = results.rename({"timestamp": "date"}, axis=1)
+        results.loc[:, "__date_ts"] = results.loc[:, "date"].dt.as_unit("ms").astype("int64")
+        # Exclude non-bot managed for now
+        results_filtered = results.loc[results["bot_managed"]]
+
+        results_final = (
+            results_filtered.groupby(["date", "__date_ts"])
+            .agg({"total_quote": "sum"})
+            .reset_index()
+        )
+        hist = KeyValueStore.get_datetime_value("wallet_history_migration_date")
+        return results_final, dt_ts_def(hist, 0)
+
     def __balance_get_est_stake(
         self, coin: str, stake_currency: str, amount: float, balance: Wallet
     ) -> tuple[float, float]:
@@ -1386,7 +1407,7 @@ class RPC:
         }
 
     def _rpc_locks(self) -> dict[str, Any]:
-        """Returns the  current locks"""
+        """Returns the current locks"""
 
         locks = PairLocks.get_pair_locks(None)
         return {"lock_count": len(locks), "locks": [lock.to_json() for lock in locks]}
@@ -1515,7 +1536,7 @@ class RPC:
                 df_cols = [col for col in dataframe_columns if col in cols_set]
                 dataframe = dataframe.loc[:, df_cols]
 
-            dataframe.loc[:, "__date_ts"] = dataframe.loc[:, "date"].astype(int64) // 1000 // 1000
+            dataframe.loc[:, "__date_ts"] = dataframe.loc[:, "date"].dt.as_unit("ms").astype(int64)
             # Move signal close to separate column when signal for easy plotting
             for sig_type in signals.keys():
                 if sig_type in dataframe.columns:
@@ -1525,7 +1546,7 @@ class RPC:
 
             # band-aid until this is fixed:
             # https://github.com/pandas-dev/pandas/issues/45836
-            datetime_types = ["datetime", "datetime64", "datetime64[ns, UTC]"]
+            datetime_types = ["datetime", "datetime64", "datetimetz"]
             date_columns = dataframe.select_dtypes(include=datetime_types)
             for date_column in date_columns:
                 # replace NaT with `None`

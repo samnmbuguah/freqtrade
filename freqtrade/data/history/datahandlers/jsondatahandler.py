@@ -35,8 +35,8 @@ class JsonDataHandler(IDataHandler):
         filename = self._pair_data_filename(self._datadir, pair, timeframe, candle_type)
         self.create_dir_if_needed(filename)
         _data = data.copy()
-        # Convert date to int
-        _data["date"] = _data["date"].astype(np.int64) // 1000 // 1000
+        # Convert date to int (milliseconds)
+        _data["date"] = _data["date"].dt.as_unit("ms").astype(np.int64)
 
         # Reset index, select only appropriate columns and save as json
         _data.reset_index(drop=True).loc[:, self._columns].to_json(

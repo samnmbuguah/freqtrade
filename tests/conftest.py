@@ -169,10 +169,12 @@ def generate_trades_history(n_rows, start_date: datetime | None = None, days=5):
     return df
 
 
-def generate_test_data(timeframe: str, size: int, start: str = "2020-07-05", random_seed=42):
+def generate_test_data(
+    timeframe: str, size: int, start: str = "2020-07-05", random_seed=42, base=20
+):
     np.random.seed(random_seed)
 
-    base = np.random.normal(20, 2, size=size)
+    base = np.random.normal(base, 2, size=size)
     if timeframe == "1y":
         date = pd.date_range(start, periods=size, freq="1YS", tz="UTC")
     elif timeframe == "1M":
@@ -205,7 +207,7 @@ def generate_test_data(timeframe: str, size: int, start: str = "2020-07-05", ran
 def generate_test_data_raw(timeframe: str, size: int, start: str = "2020-07-05", random_seed=42):
     """Generates data in the ohlcv format used by ccxt"""
     df = generate_test_data(timeframe, size, start, random_seed)
-    df["date"] = df.loc[:, "date"].astype(np.int64) // 1000 // 1000
+    df["date"] = df.loc[:, "date"].dt.as_unit("ms").astype(np.int64)
     return list(list(x) for x in zip(*(df[x].values.tolist() for x in df.columns), strict=False))
 
 
