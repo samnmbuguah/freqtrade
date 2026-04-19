@@ -1,8 +1,8 @@
 ---
 services:
   freqtrade:
-    image: freqtradeorg/freqtrade:stable
-    # image: freqtradeorg/freqtrade:develop
+    # image: freqtradeorg/freqtrade:stable
+    image: freqtradeorg/freqtrade:develop
     # Use plotting image
     # image: freqtradeorg/freqtrade:develop_plot
     # # Enable GPU Image and GPU Resources (only relevant for freqAI)
@@ -35,7 +35,7 @@ services:
       - screencoins_default
 
   freqtrade_1m:
-    image: freqtradeorg/freqtrade:stable
+    image: freqtradeorg/freqtrade:develop
     restart: unless-stopped
     container_name: freqtrade_1m
     dns:
@@ -52,7 +52,7 @@ services:
       - screencoins_default
 
   freqtrade_254m:
-    image: freqtradeorg/freqtrade:stable
+    image: freqtradeorg/freqtrade:develop
     restart: unless-stopped
     container_name: freqtrade_254m
     dns:
