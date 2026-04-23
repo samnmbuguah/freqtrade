@@ -1,56 +1,5 @@
 ---
 services:
-  freqtrade:
-    # image: freqtradeorg/freqtrade:stable
-    image: freqtradeorg/freqtrade:develop
-    # Use plotting image
-    # image: freqtradeorg/freqtrade:develop_plot
-    # # Enable GPU Image and GPU Resources (only relevant for freqAI)
-    # # Make sure to uncomment the whole deploy section
-    # GPU Support cleared for Contabo CPU-only VPS
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [ gpu ]
-    # Build step - only needed when additional dependencies are needed
-    # build:
-    #   context: .
-    #   dockerfile: "./docker/Dockerfile.custom"
-    restart: unless-stopped
-    container_name: freqtrade
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    volumes:
-      - "./user_data:/freqtrade/user_data"
-      - "./freqtrade:/freqtrade/freqtrade"
-    ports:
-      - "8080:8080"
-    command: >
-      trade --logfile /freqtrade/user_data/logs/freqtrade.log --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite --config /freqtrade/user_data/config.json --strategy LiquidityGoblin
-    networks:
-      - screencoins_default
-
-  freqtrade_1m:
-    image: freqtradeorg/freqtrade:develop
-    restart: unless-stopped
-    container_name: freqtrade_1m
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    volumes:
-      - "./user_data:/freqtrade/user_data"
-      - "./freqtrade:/freqtrade/freqtrade"
-    ports:
-      - "8081:8081"
-    command: >
-      trade --logfile /freqtrade/user_data/logs/freqtrade_1m.log --db-url sqlite:////freqtrade/user_data/tradesv3_1m.sqlite --config /freqtrade/user_data/config_1m.json --strategy LiquidityGoblin1m
-    networks:
-      - screencoins_default
-
   freqtrade_254m:
     image: freqtradeorg/freqtrade:develop
     restart: unless-stopped
@@ -62,9 +11,26 @@ services:
       - "./user_data:/freqtrade/user_data"
       - "./freqtrade:/freqtrade/freqtrade"
     ports:
-      - "8083:8083"
+      - "8080:8080"
     command: >
       trade --logfile /freqtrade/user_data/logs/freqtrade_254m.log --db-url sqlite:////freqtrade/user_data/tradesv3_254m.sqlite --config /freqtrade/user_data/config_254m.json --strategy LiquidityGoblin254m
+    networks:
+      - screencoins_default
+
+  freqtrade_fvg:
+    image: freqtradeorg/freqtrade:develop
+    restart: unless-stopped
+    container_name: freqtrade_fvg
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./freqtrade:/freqtrade/freqtrade"
+    ports:
+      - "8081:8081"
+    command: >
+      trade --logfile /freqtrade/user_data/logs/freqtrade_fvg.log --db-url sqlite:////freqtrade/user_data/tradesv3_fvg.sqlite --config /freqtrade/user_data/config_fvg.json --strategy FvgLiquidity
     networks:
       - screencoins_default
 
