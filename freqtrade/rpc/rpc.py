@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import psutil
 from dateutil.relativedelta import relativedelta
 from dateutil.tz import tzlocal
-from numpy import inf, int64, isnan, mean, nan
+from numpy import inf, isnan, mean, nan
 from pandas import DataFrame, NaT, read_sql
 from sqlalchemy import func, select
 
@@ -1536,7 +1536,9 @@ class RPC:
                 df_cols = [col for col in dataframe_columns if col in cols_set]
                 dataframe = dataframe.loc[:, df_cols]
 
-            dataframe.loc[:, "__date_ts"] = dataframe.loc[:, "date"].dt.as_unit("ms").astype(int64)
+            dataframe.loc[:, "__date_ts"] = (
+                dataframe.loc[:, "date"].dt.as_unit("ms").astype("int64")
+            )
             # Move signal close to separate column when signal for easy plotting
             for sig_type in signals.keys():
                 if sig_type in dataframe.columns:

@@ -2669,11 +2669,11 @@ class Exchange:
         if self._can_use_websocket(self._exchange_ws, pair, timeframe, candle_type):
             candle_ts = dt_ts(timeframe_to_prev_date(timeframe))
             prev_candle_ts = dt_ts(date_minus_candles(timeframe, 1))
-            candles = self._exchange_ws.ohlcvs(pair, timeframe)
-            half_candle = int(candle_ts - (candle_ts - prev_candle_ts) * 0.5)
-            last_refresh_time = int(
-                self._exchange_ws.klines_last_refresh.get((pair, timeframe, candle_type), 0)
+            candles, last_refresh_time = self._exchange_ws.get_ohlcv_with_refresh(
+                pair, timeframe, candle_type
             )
+            last_refresh_time = int(last_refresh_time)
+            half_candle = int(candle_ts - (candle_ts - prev_candle_ts) * 0.5)
 
             if (
                 candles
