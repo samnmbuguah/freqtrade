@@ -1041,6 +1041,7 @@ def test_auto_hyperopt_interface_loadparams(default_conf, mocker, caplog):
     ],
 )
 def test_pandas_warning_direct(ohlcv_history, function, raises, recwarn):
+    recwarn.clear()
     df = _STRATEGY.populate_indicators(ohlcv_history, {"pair": "ETH/BTC"})
     if raises:
         assert len(recwarn) == 1
@@ -1054,6 +1055,7 @@ def test_pandas_warning_direct(ohlcv_history, function, raises, recwarn):
 
 
 def test_pandas_warning_through_analyze_pair(ohlcv_history, mocker, recwarn):
+    recwarn.clear()
     mocker.patch.object(_STRATEGY.dp, "ohlcv", return_value=ohlcv_history)
     _STRATEGY.analyze_pair("ETH/BTC")
     assert len(recwarn) == 0, f"warnings: {', '.join(str(w) for w in recwarn.list)}"
