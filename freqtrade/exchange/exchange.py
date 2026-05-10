@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from math import floor, isnan
 from threading import Lock
 from typing import Any, Literal, TypeGuard, TypeVar
+from uuid import uuid4
 
 import ccxt
 import ccxt.pro as ccxt_pro
@@ -1152,7 +1153,7 @@ class Exchange:
         stop_price: float | None = None,
     ) -> CcxtOrder:
         now = dt_now()
-        order_id = f"dry_run_{side}_{pair}_{now.timestamp()}"
+        order_id = f"dry_run_{side}_{pair}_{uuid4()}"
         # Rounding here must respect to contract sizes
         _amount = self._contracts_to_amount(
             pair, self.amount_to_precision(pair, self._amount_to_contracts(pair, amount))
