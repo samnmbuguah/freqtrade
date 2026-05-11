@@ -52,7 +52,7 @@ class Binance(Exchange):
         "supports_demo_trading": False,
     }
     _ft_has_futures: FtHas = {
-        "ohlcv_candle_limit": 5000,  # Increased from 499 to bypass startup_candle_count safety check (we have local data)
+        "ohlcv_candle_limit": 1499,
         "funding_fee_candle_limit": 1000,
         "stoploss_order_types": {"limit": "stop", "market": "stop_market"},
         "stoploss_blocks_assets": False,  # Stoploss orders do not block assets
