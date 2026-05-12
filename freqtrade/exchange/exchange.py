@@ -888,7 +888,7 @@ class Exchange:
     def validate_required_startup_candles(self, startup_candles: int, timeframe: str) -> int:
         """
         Checks if required startup_candles is more than ohlcv_candle_limit().
-        Requires a grace-period of 5 candles - so a startup-period up to 494 is allowed by default.
+        Requires a grace-period of 20 candles - so a startup-period up to 9980 is allowed by default.
         """
 
         candle_limit = self.ohlcv_candle_limit(
@@ -898,16 +898,16 @@ class Exchange:
         )
         # Require one more candle - to account for the still open candle.
         candle_count = startup_candles + 1
-        # Allow 5 calls to the exchange per pair
+        # Allow 20 calls to the exchange per pair
         required_candle_call_count = int(
             (candle_count / candle_limit) + (0 if candle_count % candle_limit == 0 else 1)
         )
         if self._ft_has["ohlcv_has_history"]:
-            if required_candle_call_count > 5:
-                # Only allow 5 calls per pair to somewhat limit the impact
+            if required_candle_call_count > 20:
+                # Only allow 20 calls per pair to somewhat limit the impact
                 raise ConfigurationError(
                     f"This strategy requires {startup_candles} candles to start, "
-                    f"which is more than 5x ({candle_limit * 5 - 1} candles) "
+                    f"which is more than 20x ({candle_limit * 20 - 1} candles) "
                     f"the amount of candles {self.name} provides for {timeframe}."
                 )
         elif required_candle_call_count > 1:
