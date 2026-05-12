@@ -15,7 +15,9 @@ services:
     command: >
       trade --logfile /freqtrade/user_data/logs/freqtrade_254m.log --db-url sqlite:////freqtrade/user_data/tradesv3_254m.sqlite --config /freqtrade/user_data/config_254m.json --strategy LiquidityGoblin254m
     networks:
-      - screencoins_default
+      screencoins_default:
+    extra_hosts:
+      - "web:172.18.0.1"
 
   freqtrade_fvg:
     image: freqtradeorg/freqtrade:develop
@@ -32,7 +34,9 @@ services:
     command: >
       trade --logfile /freqtrade/user_data/logs/freqtrade_fvg.log --db-url sqlite:////freqtrade/user_data/tradesv3_fvg.sqlite --config /freqtrade/user_data/config_fvg.json --strategy FvgLiquidity
     networks:
-      - screencoins_default
+      screencoins_default:
+        aliases:
+          - web
 
   freqtrade_nfi:
     image: freqtradeorg/freqtrade:develop
