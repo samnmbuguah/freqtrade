@@ -205,6 +205,26 @@ def test_plural() -> None:
             "mysql+pymysql://user:*****@some_mariadb/dbname?charset=utf8mb4",
         ),
         (
+            "postgresql+psycopg://scott:p%40ss@host/dbname",
+            "postgresql+psycopg://scott:*****@host/dbname",
+        ),
+        (
+            "postgresql+psycopg://scott:pa:ss@host/dbname",
+            "postgresql+psycopg://scott:*****@host/dbname",
+        ),
+        (
+            "postgresql+psycopg://scott:scott@[::1]:5432/dbname",
+            "postgresql+psycopg://scott:*****@[::1]:5432/dbname",
+        ),
+        (
+            "postgresql+psycopg://scott@host/dbname",
+            "postgresql+psycopg://scott@host/dbname",
+        ),
+        (
+            "postgresql+psycopg://host/dbname",
+            "postgresql+psycopg://host/dbname",
+        ),
+        (
             "sqlite:////freqtrade/user_data/tradesv3.sqlite",
             "sqlite:////freqtrade/user_data/tradesv3.sqlite",
         ),
@@ -230,7 +250,7 @@ def test_deep_merge_dicts():
 def test_dataframe_json(ohlcv_history):
     from pandas.testing import assert_frame_equal
 
-    json = dataframe_to_json(ohlcv_history)
+    json = dataframe_to_json(ohlcv_history.copy())
     dataframe = json_to_dataframe(json)
 
     assert list(ohlcv_history.columns) == list(dataframe.columns)
@@ -238,6 +258,6 @@ def test_dataframe_json(ohlcv_history):
 
     assert_frame_equal(ohlcv_history, dataframe)
     ohlcv_history.at[1, "date"] = pd.NaT
-    json = dataframe_to_json(ohlcv_history)
+    json = dataframe_to_json(ohlcv_history.copy())
 
     dataframe = json_to_dataframe(json)
