@@ -1,9 +1,9 @@
 ---
 services:
-  freqtrade_254m:
+  freqtrade_soundmoney:
     image: freqtradeorg/freqtrade:develop
     restart: unless-stopped
-    container_name: freqtrade_254m
+    container_name: freqtrade_soundmoney
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -13,24 +13,7 @@ services:
     ports:
       - "8080:8080"
     command: >
-      trade --logfile /freqtrade/user_data/logs/freqtrade_254m.log --db-url sqlite:////freqtrade/user_data/tradesv3_254m.sqlite --config /freqtrade/user_data/config_254m.json --strategy LiquidityGoblin254m
-    networks:
-      - screencoins_default
-
-  freqtrade_fvg:
-    image: freqtradeorg/freqtrade:develop
-    restart: unless-stopped
-    container_name: freqtrade_fvg
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    volumes:
-      - "./user_data:/freqtrade/user_data"
-      - "./freqtrade:/freqtrade/freqtrade"
-    ports:
-      - "8081:8081"
-    command: >
-      trade --logfile /freqtrade/user_data/logs/freqtrade_fvg.log --db-url sqlite:////freqtrade/user_data/tradesv3_fvg.sqlite --config /freqtrade/user_data/config_fvg.json --strategy FvgLiquidity
+      trade --logfile /freqtrade/user_data/logs/freqtrade_soundmoney.log --db-url sqlite:////freqtrade/user_data/tradesv3_soundmoney.sqlite --config /freqtrade/user_data/config_soundmoney.json --strategy SoundMoney254
     networks:
       - screencoins_default
 
