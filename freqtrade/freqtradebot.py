@@ -1837,7 +1837,10 @@ class FreqtradeBot(LoggingMixin):
         if trade.has_open_orders:
             oo = trade.select_order(side, True)
             if oo is not None:
-                if price == oo.price and side == oo.side and amount == oo.amount:
+                # Compare the precision-rounded price - create_order will round the same
+                # way, so an unrounded requested price must not trigger a replacement.
+                requested_price = self.exchange.price_to_precision(trade.pair, price)
+                if requested_price == oo.price and side == oo.side and amount == oo.amount:
                     logger.info(
                         f"A similar open order was found for {trade.pair}. "
                         f"Keeping existing {trade.exit_side} order. {price=},  {amount=}"
