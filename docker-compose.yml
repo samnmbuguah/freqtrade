@@ -10,13 +10,14 @@ services:
     volumes:
       - "./user_data:/freqtrade/user_data"
       - "./freqtrade:/freqtrade/freqtrade"
-    ports:
-      - "8080:8080"
     command: >
       trade --logfile /freqtrade/user_data/logs/freqtrade_joker.log --db-url sqlite:////freqtrade/user_data/tradesv3_joker.sqlite --config /freqtrade/user_data/config_joker.json --strategy Joker254
     networks:
       - screencoins_default
+      - monitoringerp_default
 
 networks:
   screencoins_default:
+    external: true
+  monitoringerp_default:
     external: true
