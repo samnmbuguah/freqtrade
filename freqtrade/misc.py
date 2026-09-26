@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, TextIO
 from urllib.parse import urlparse, urlunparse
 
+import orjson
 import pandas as pd
 import rapidjson
 
@@ -25,7 +26,9 @@ def dump_json_to_file(file_obj: TextIO, data: Any) -> None:
     :param file_obj: File object to write to
     :param data: JSON Data to save
     """
-    rapidjson.dump(data, file_obj, default=str, number_mode=rapidjson.NM_NATIVE)
+    file_obj.write(
+        orjson.dumps(data, default=str, option=orjson.OPT_SERIALIZE_NUMPY).decode("utf-8")
+    )
 
 
 def file_dump_json(filename: Path, data: Any, is_zip: bool = False, log: bool = True) -> None:
@@ -92,6 +95,18 @@ def is_file_in_dir(file: Path, directory: Path) -> bool:
     :return: True if file is directly within directory, False otherwise
     """
     return file.is_file() and file.parent.samefile(directory)
+
+
+def is_path_in_dir(path: Path, directory: Path) -> bool:
+    """
+    Helper function to check if path is within directory - neither has to exist.
+    :param path: Path to check
+    :param directory: Directory to check against
+        When used in the API, this parameter cannot be user controlled (outside of the config)
+        to avoid security issues.
+    :return: True if path is within directory, False otherwise
+    """
+    return path.resolve().is_relative_to(directory.resolve())
 
 
 def pair_to_filename(pair: str) -> str:
