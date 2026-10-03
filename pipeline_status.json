@@ -1,0 +1,14 @@
+{
+  "running": false,
+  "current_index": 9,
+  "total_items": 9,
+  "strategy": "DailyOutlierAnchor",
+  "timeframe": "1h",
+  "stage": 2,
+  "stage_name": "Stage 2: ROI, Stoploss & Trailing",
+  "spaces": "roi stoploss trailing",
+  "target_epochs": 1200,
+  "start_time": "2026-10-03 01:24:11 UTC",
+  "error": null,
+  "completed_all": true
+}

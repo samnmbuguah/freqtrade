@@ -1,0 +1,13 @@
+services:
+  research:
+    image: freqtradeorg/freqtrade:2026.8
+    working_dir: /freqtrade
+    volumes:
+      - ./user_data:/freqtrade/user_data
+    entrypoint: ["freqtrade"]
+    command: ["--version"]
+    deploy:
+      resources:
+        limits:
+          cpus: "6"
+          memory: 12G
