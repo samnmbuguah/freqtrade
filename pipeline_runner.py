@@ -27,19 +27,19 @@ CONTAINER_NAME = "hyperopt_pipeline_runner"
 
 SCHEDULE = [
     # 1. 15m Timeframe (Live Bot & Primary Timeframe)
-    {"strategy": "LiqCapitulationLong", "timeframe": "15m", "timerange": "20260731-20260913"},
-    {"strategy": "LiqExhaustionShort",  "timeframe": "15m", "timerange": "20260731-20260913"},
-    {"strategy": "DailyOutlierAnchor",  "timeframe": "15m", "timerange": "20260731-20260913"},
+    {"strategy": "LiqCapitulationLong", "timeframe": "15m", "timerange": "20260731-20261003"},
+    {"strategy": "LiqExhaustionShort",  "timeframe": "15m", "timerange": "20260731-20261003"},
+    {"strategy": "DailyOutlierAnchor",  "timeframe": "15m", "timerange": "20260731-20261003"},
 
     # 2. 5m Timeframe (Fast Scalp Engine)
-    {"strategy": "LiqCapitulationLong", "timeframe": "5m",  "timerange": "20260731-20260913"},
-    {"strategy": "LiqExhaustionShort",  "timeframe": "5m",  "timerange": "20260731-20260913"},
-    {"strategy": "DailyOutlierAnchor",  "timeframe": "5m",  "timerange": "20260731-20260913"},
+    {"strategy": "LiqCapitulationLong", "timeframe": "5m",  "timerange": "20260731-20261003"},
+    {"strategy": "LiqExhaustionShort",  "timeframe": "5m",  "timerange": "20260731-20261003"},
+    {"strategy": "DailyOutlierAnchor",  "timeframe": "5m",  "timerange": "20260731-20261003"},
 
     # 3. 1h Timeframe (Macro Swing Engine)
-    {"strategy": "LiqCapitulationLong", "timeframe": "1h",  "timerange": "20260731-20260913"},
-    {"strategy": "LiqExhaustionShort",  "timeframe": "1h",  "timerange": "20260731-20260913"},
-    {"strategy": "DailyOutlierAnchor",  "timeframe": "1h",  "timerange": "20260731-20260913"},
+    {"strategy": "LiqCapitulationLong", "timeframe": "1h",  "timerange": "20260731-20261003"},
+    {"strategy": "LiqExhaustionShort",  "timeframe": "1h",  "timerange": "20260731-20261003"},
+    {"strategy": "DailyOutlierAnchor",  "timeframe": "1h",  "timerange": "20260731-20261003"},
 ]
 
 STAGE1_EPOCHS = 1500

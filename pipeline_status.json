@@ -8,7 +8,7 @@
   "stage_name": "Stage 2: ROI, Stoploss & Trailing",
   "spaces": "roi stoploss trailing",
   "target_epochs": 1200,
-  "start_time": "2026-10-03 01:24:11 UTC",
+  "start_time": "2026-10-04 05:40:11 UTC",
   "error": null,
   "completed_all": true
 }
