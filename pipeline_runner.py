@@ -89,10 +89,10 @@ def append_to_summary(strategy: str, timeframe: str, phase_name: str, metrics: d
         f.write(f"| {now_str} | **{strategy}** | `{timeframe}` | {phase_name} | {trades} | **{wr:.1f}%** | **+{p_abs:.2f} USDT** | {dd:.2f}% | **{sortino:.2f}** | {sharpe:.2f} |\n")
 
 def run_hyperopt_job(strategy: str, timeframe: str, timerange: str, spaces: str, epochs: int, index: int, total: int):
-    phase_desc = f"10k Epochs (All Spaces: {spaces})"
+    phase_desc = f"10k Epochs (All Spaces: {spaces} | OnlyProfit Loss)"
     print("\n" + "=" * 75)
     print(f"[{index}/{total}] Starting {strategy} on {timeframe} ({epochs:,} Epochs)")
-    print(f"Spaces: {spaces} | Loss: SortinoHyperOptLoss | Range: {timerange}")
+    print(f"Spaces: {spaces} | Loss: OnlyProfitHyperOptLoss | Range: {timerange} | Max Leverage: 13x")
     print("=" * 75)
 
     # Clean previous container
@@ -113,7 +113,7 @@ def run_hyperopt_job(strategy: str, timeframe: str, timerange: str, spaces: str,
         completed_all=False
     )
 
-    log_file = f"/freqtrade/user_data/logs/hyperopt_{strategy}_{timeframe}_10k.log"
+    log_file = f"/freqtrade/user_data/logs/hyperopt_{strategy}_{timeframe}_10k_onlyprofit.log"
     cmd = [
         "docker", "run",
         "--name", CONTAINER_NAME,
@@ -128,7 +128,7 @@ def run_hyperopt_job(strategy: str, timeframe: str, timerange: str, spaces: str,
         "--spaces", *spaces.split(),
         "--epochs", str(epochs),
         "-j", "-1",
-        "--hyperopt-loss", "SortinoHyperOptLoss",
+        "--hyperopt-loss", "OnlyProfitHyperOptLoss",
         "--logfile", log_file
     ]
 
@@ -173,12 +173,12 @@ def run_hyperopt_job(strategy: str, timeframe: str, timerange: str, spaces: str,
     if best_trial:
         m = best_trial.get("results_metrics", {})
         p = best_trial.get("params_details", {})
-        append_to_summary(strategy, timeframe, "10k All-Spaces", m, p)
+        append_to_summary(strategy, timeframe, "10k All-Spaces (OnlyProfit)", m, p)
 
     # Save permanent archive for this 10k run
-    archived_json = os.path.join(USER_DATA, "strategies", f"{strategy}_{timeframe}_10k_optimized.json")
+    archived_json = os.path.join(USER_DATA, "strategies", f"{strategy}_{timeframe}_10k_onlyprofit_optimized.json")
     subprocess.run(["cp", target_json, archived_json])
-    print(f"Archived 10k optimized config to: {archived_json}")
+    print(f"Archived 10k OnlyProfit optimized config to: {archived_json}")
 
     print(f"Completed {strategy} 10,000 epochs in {dur:.1f} minutes.")
     return True

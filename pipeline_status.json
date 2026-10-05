@@ -1,14 +1,14 @@
 {
-  "running": false,
-  "current_index": 3,
+  "running": true,
+  "current_index": 1,
   "total_items": 3,
-  "strategy": "LiquidationRegimeStrategy",
+  "strategy": "LiqCapitulationLong",
   "timeframe": "15m",
   "stage": 1,
-  "stage_name": "10k Epochs (All Spaces: buy sell roi stoploss trailing)",
+  "stage_name": "10k Epochs (All Spaces: buy sell roi stoploss trailing | OnlyProfit Loss)",
   "spaces": "buy sell roi stoploss trailing",
   "target_epochs": 10000,
-  "start_time": "2026-10-04 21:27:33 UTC",
+  "start_time": "2026-10-05 06:56:51 UTC",
   "error": null,
-  "completed_all": true
+  "completed_all": false
 }
