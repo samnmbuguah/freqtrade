@@ -1,14 +1,14 @@
 {
   "running": false,
-  "current_index": 9,
-  "total_items": 9,
-  "strategy": "DailyOutlierAnchor",
-  "timeframe": "1h",
-  "stage": 2,
-  "stage_name": "Stage 2: ROI, Stoploss & Trailing",
-  "spaces": "roi stoploss trailing",
-  "target_epochs": 1200,
-  "start_time": "2026-10-04 05:40:11 UTC",
+  "current_index": 3,
+  "total_items": 3,
+  "strategy": "LiquidationRegimeStrategy",
+  "timeframe": "15m",
+  "stage": 1,
+  "stage_name": "10k Epochs (All Spaces: buy sell roi stoploss trailing)",
+  "spaces": "buy sell roi stoploss trailing",
+  "target_epochs": 10000,
+  "start_time": "2026-10-04 21:27:33 UTC",
   "error": null,
   "completed_all": true
 }
