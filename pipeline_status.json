@@ -1,14 +1,14 @@
 {
   "running": true,
   "current_index": 1,
-  "total_items": 3,
-  "strategy": "LiqCapitulationLong",
+  "total_items": 4,
+  "strategy": "LiqCandleBreakoutStrategy",
   "timeframe": "15m",
   "stage": 1,
   "stage_name": "10k Epochs (All Spaces: buy sell roi stoploss trailing | OnlyProfit Loss)",
   "spaces": "buy sell roi stoploss trailing",
   "target_epochs": 10000,
-  "start_time": "2026-10-05 06:56:51 UTC",
+  "start_time": "2026-10-05 11:01:05 UTC",
   "error": null,
   "completed_all": false
 }
