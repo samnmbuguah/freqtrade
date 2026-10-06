@@ -31,9 +31,6 @@ CONTAINER_NAME = "hyperopt_pipeline_runner"
 
 SCHEDULE = [
     {"strategy": "LiqCandleBreakoutStrategy", "timeframe": "15m", "timerange": "20260731-20261003"},
-    {"strategy": "LiqCapitulationLong", "timeframe": "15m", "timerange": "20260731-20261003"},
-    {"strategy": "LiqExhaustionShort",  "timeframe": "15m", "timerange": "20260731-20261003"},
-    {"strategy": "LiquidationRegimeStrategy", "timeframe": "15m", "timerange": "20260731-20261003"},
 ]
 
 TARGET_EPOCHS = 10000
