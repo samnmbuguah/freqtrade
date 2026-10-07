@@ -1,0 +1,52 @@
+---
+services:
+  freqtrade_liquidation:
+    image: freqtradeorg/freqtrade:develop
+    restart: unless-stopped
+    container_name: freqtrade_liquidation
+    ports:
+      - "8080:8080"
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./freqtrade:/freqtrade/freqtrade"
+    command: >
+      trade --logfile /freqtrade/user_data/logs/freqtrade_liquidation.log --db-url sqlite:////freqtrade/user_data/tradesv3_liquidation.sqlite --config /freqtrade/user_data/config_liquidation.json --strategy LiquidationRegimeStrategy
+    networks:
+      - screencoins_default
+      - monitoringerp_default
+
+  freqtrade_liq_capitulation:
+    image: freqtradeorg/freqtrade:develop
+    restart: unless-stopped
+    container_name: freqtrade_liq_capitulation
+    ports:
+      - "8085:8085"
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./freqtrade:/freqtrade/freqtrade"
+    command: >
+      trade --logfile /freqtrade/user_data/logs/freqtrade_liq_capitulation.log --db-url sqlite:////freqtrade/user_data/tradesv3_liq_capitulation.sqlite --config /freqtrade/user_data/config_liq_capitulation.json --strategy LiqCapitulationLong
+    networks:
+      - screencoins_default
+      - monitoringerp_default
+
+  freqtrade_liq_exhaustion:
+    image: freqtradeorg/freqtrade:develop
+    restart: unless-stopped
+    container_name: freqtrade_liq_exhaustion
+    ports:
+      - "8086:8086"
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./freqtrade:/freqtrade/freqtrade"
+    command: >
+      trade --logfile /freqtrade/user_data/logs/freqtrade_liq_exhaustion.log --db-url sqlite:////freqtrade/user_data/tradesv3_liq_exhaustion.sqlite --config /freqtrade/user_data/config_liq_exhaustion.json --strategy LiqExhaustionShort
+    networks:
+      - screencoins_default
+      - monitoringerp_default
+
+networks:
+  screencoins_default:
+    external: true
+  monitoringerp_default:
+    external: true
