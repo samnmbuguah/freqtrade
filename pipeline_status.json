@@ -1,13 +1,13 @@
 {
-  "running": false,
-  "completed_all": true,
+  "running": true,
+  "completed_all": false,
   "strategy": "LiqVwapWallStrategy",
   "timeframe": "15m",
   "current_index": 1,
   "total_items": 1,
-  "stage_name": "1500-Epoch Deep Hyperopt Completed",
-  "target_epochs": 1500,
+  "stage_name": "Phase 2 Deep 3,000-Epoch Hyperopt",
+  "target_epochs": 3000,
   "spaces": "buy sell roi stoploss trailing",
   "loss": "SharpeHyperOptLossDaily",
-  "note": "1500 epochs completed with +79.17% profit, 0.00% drawdown, 83.3% win rate"
+  "note": "Optimizing confluence dual-walls and scaled leverage for >100% net profit"
 }
