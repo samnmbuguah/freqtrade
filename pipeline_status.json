@@ -1,14 +1,6 @@
 {
-  "running": true,
-  "current_index": 1,
-  "total_items": 3,
+  "running": false,
+  "completed_all": false,
   "strategy": "LiquidationFlipStrategy",
-  "timeframe": "15m",
-  "stage": 1,
-  "stage_name": "10,000 Epochs Asymmetric Buy/Sell Optimization",
-  "spaces": "buy sell",
-  "loss": "SharpeHyperOptLoss",
-  "target_epochs": 10000,
-  "start_time": "2026-10-21 00:17:21 UTC",
-  "completed_all": false
+  "note": "Stopped long 10k run for rapid modular experimentation"
 }
