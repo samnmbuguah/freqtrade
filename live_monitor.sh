@@ -28,6 +28,8 @@ def get_latest_file(strat=None):
                     if os.path.exists(p):
                         if not strat or f'_{strat}_' in latest_name:
                             return p
+                        # If the specified strat doesn't match latest file, fallback to latest file if valid
+                        return p
         except Exception:
             pass
 
@@ -143,40 +145,40 @@ while True:
                 print(f'    - Long Leverage:     {p[\"long_leverage_num\"]}x')
             elif 'leverage_num' in p:
                 print(f'    - Leverage:          {p[\"leverage_num\"]}x')
-            if 'long_trend_ema_period' in p:
-                print(f'    - Long Trend EMA:    {p[\"long_trend_ema_period\"]}')
-            elif 'trend_ema_period' in p:
-                print(f'    - Trend EMA:         {p[\"trend_ema_period\"]}')
-            if 'long_wick_ratio_threshold' in p:
-                print(f'    - Long Wick Ratio:   {p[\"long_wick_ratio_threshold\"]*100:.1f}%')
-            elif 'wick_ratio_threshold' in p:
-                print(f'    - Wick Ratio:        {p[\"wick_ratio_threshold\"]*100:.1f}%')
-            if 'long_z_liq_reversal' in p:
-                print(f'    - Long Reversal Z:   {p[\"long_z_liq_reversal\"]} σ')
-            elif 'z_liq_reversal' in p:
-                print(f'    - Reversal Z:        {p[\"z_liq_reversal\"]} σ')
             if 'long_z_liq_cascade' in p:
                 print(f'    - Long Cascade Z:    {p[\"long_z_liq_cascade\"]} σ')
-            elif 'z_liq_cascade' in p:
-                print(f'    - Cascade Z:         {p[\"z_liq_cascade\"]} σ')
+            if 'long_z_liq_reversal' in p:
+                print(f'    - Long Reversal Z:   {p[\"long_z_liq_reversal\"]} σ')
+            if 'long_min_wall_dist' in p:
+                print(f'    - Long Wall Runway:  {p[\"long_min_wall_dist\"]*100:.2f}%')
+            if 'long_min_candle_pct' in p:
+                print(f'    - Long Min Candle:   {p[\"long_min_candle_pct\"]*100:.2f}%')
+            if 'long_wick_ratio_threshold' in p:
+                print(f'    - Long Wick Ratio:   {p[\"long_wick_ratio_threshold\"]*100:.1f}%')
 
         if sell_keys:
             print('  [Sell Space / Short Entries]')
             if 'short_leverage_num' in p:
                 print(f'    - Short Leverage:    {p[\"short_leverage_num\"]}x')
-            if 'short_trend_ema_period' in p:
-                print(f'    - Short Trend EMA:   {p[\"short_trend_ema_period\"]}')
-            if 'short_wick_ratio_threshold' in p:
-                print(f'    - Short Wick Ratio:  {p[\"short_wick_ratio_threshold\"]*100:.1f}%')
-            if 'short_z_liq_reversal' in p:
-                print(f'    - Short Reversal Z:  {p[\"short_z_liq_reversal\"]} σ')
             if 'short_z_liq_cascade' in p:
                 print(f'    - Short Cascade Z:   {p[\"short_z_liq_cascade\"]} σ')
+            if 'short_z_liq_reversal' in p:
+                print(f'    - Short Reversal Z:  {p[\"short_z_liq_reversal\"]} σ')
+            if 'short_min_wall_dist' in p:
+                print(f'    - Short Wall Runway: {p[\"short_min_wall_dist\"]*100:.2f}%')
+            if 'short_min_candle_pct' in p:
+                print(f'    - Short Min Candle:  {p[\"short_min_candle_pct\"]*100:.2f}%')
+            if 'short_wick_ratio_threshold' in p:
+                print(f'    - Short Wick Ratio:  {p[\"short_wick_ratio_threshold\"]*100:.1f}%')
 
-        # Fallbacks for other generic strategies
-        for extra in ('stoploss', 'long_tp_disp', 'short_tp_disp', 'target_tp_disp', 'z_liq_threshold'):
-            if extra in p:
-                print(f'    - {extra}: {p[extra]}')
+        # Trailing Stop & Risk
+        print('  [Risk & Dynamic Trailing Exits]')
+        if 'trailing_stop_positive' in p:
+            print(f'    - Trailing Stop:     {p[\"trailing_stop_positive\"]*100:.2f}%')
+        if 'trailing_stop_positive_offset' in p:
+            print(f'    - Trailing Offset:   {p[\"trailing_stop_positive_offset\"]*100:.2f}%')
+        if 'stoploss' in p:
+            print(f'    - Stoploss:          {p[\"stoploss\"]*100:.2f}%')
 
     print('=' * 75)
     print('  (Updating live every 3s... Press Ctrl+C to exit monitor)')
