@@ -4,7 +4,7 @@ TARGET_DIR="/root/Dev/screencoins/freqtrade/user_data/hyperopt_results"
 STATUS_FILE="/root/Dev/screencoins/freqtrade/pipeline_status.json"
 
 python3 -c "
-import json, glob, os, time, sys
+import json, glob, os, time, sys, re
 
 def get_status():
     if os.path.exists('${STATUS_FILE}'):
@@ -16,10 +16,28 @@ def get_status():
     return {}
 
 def get_latest_file(strat=None):
+    # 1. Try from .last_result.json
+    last_res_path = os.path.join('${TARGET_DIR}', '.last_result.json')
+    if os.path.exists(last_res_path):
+        try:
+            with open(last_res_path, 'r') as f:
+                lr = json.load(f)
+                latest_name = lr.get('latest_hyperopt')
+                if latest_name:
+                    p = os.path.join('${TARGET_DIR}', latest_name)
+                    if os.path.exists(p):
+                        if not strat or f'_{strat}_' in latest_name:
+                            return p
+        except Exception:
+            pass
+
+    # 2. Check by strategy glob
     if strat:
         files = glob.glob(f'${TARGET_DIR}/strategy_{strat}_*.fthypt')
         if files:
             return max(files, key=os.path.getmtime)
+
+    # 3. Fallback to newest .fthypt file
     files = glob.glob('${TARGET_DIR}/*.fthypt')
     if not files:
         return None
@@ -27,14 +45,14 @@ def get_latest_file(strat=None):
 
 while True:
     status = get_status()
-    active_strat = status.get('strategy', 'LiqCapitulationLong')
+    active_strat = status.get('strategy')
     active_tf = status.get('timeframe', '15m')
     current_idx = status.get('current_index', 1)
-    total_items = status.get('total_items', 9)
-    stage_num = status.get('stage', 1)
-    stage_name = status.get('stage_name', 'Stage 1: Buy & Sell Space')
-    target_epochs = status.get('target_epochs', 1500)
+    total_items = status.get('total_items', 3)
+    stage_name = status.get('stage_name', 'Hyperopt Optimization')
+    target_epochs = status.get('target_epochs', 200)
     spaces = status.get('spaces', 'buy sell')
+    loss_name = status.get('loss', 'SharpeHyperOptLoss')
 
     fpath = get_latest_file(active_strat)
     if not fpath:
@@ -42,7 +60,12 @@ while True:
         time.sleep(3)
         continue
 
-    best_loss = 999
+    # Extract strategy name from filename if not specified
+    fname = os.path.basename(fpath)
+    strat_match = re.search(r'strategy_([A-Za-z0-9]+)_', fname)
+    displayed_strat = active_strat or (strat_match.group(1) if strat_match else 'Strategy')
+
+    best_loss = 999999
     best = None
     count = 0
     size_mb = os.path.getsize(fpath) / (1024 * 1024)
@@ -50,14 +73,18 @@ while True:
     try:
         with open(fpath, 'r') as f:
             for line in f:
-                if not line.strip():
+                line_str = line.strip()
+                if not line_str:
                     continue
                 count += 1
-                d = json.loads(line)
-                loss = d.get('loss', 999)
-                if loss < best_loss:
-                    best_loss = loss
-                    best = d
+                try:
+                    d = json.loads(line_str)
+                    loss = d.get('loss', 999999)
+                    if loss < best_loss:
+                        best_loss = loss
+                        best = d
+                except Exception:
+                    continue
     except Exception as e:
         time.sleep(2)
         continue
@@ -69,56 +96,89 @@ while True:
     filled = int(bar_len * (pct / 100.0))
     bar = '=' * filled + '-' * (bar_len - filled)
 
-    print('=' * 70)
-    print('       SCREENCOINS TWO-STAGE SORTINO HYPEROPT MONITOR')
-    print('=' * 70)
-    print(f'Active Task:     [{current_idx}/{total_items}] {active_strat} ({active_tf})')
-    print(f'Current Phase:   Stage {stage_num}: {stage_name}')
+    print('=' * 75)
+    print('            SCREENCOINS HYPEROPT LIVE MONITOR')
+    print('=' * 75)
+    print(f'Active Task:     [{current_idx}/{total_items}] {displayed_strat} ({active_tf})')
+    print(f'Phase & Loss:    {stage_name} | {loss_name}')
     print(f'Spaces:          {spaces}')
     print(f'Progress:        [{bar}] {count}/{target_epochs} ({pct:.1f}%)')
-    print(f'Results File:    {os.path.basename(fpath)} ({size_mb:.1f} MB)')
-    print('-' * 70)
+    print(f'Results File:    {fname} ({size_mb:.2f} MB)')
+    print('-' * 75)
 
     if best:
         m = best.get('results_metrics', {})
         trades = m.get('total_trades', 0)
         wins = m.get('wins', 0)
         losses = m.get('losses', 0)
+        draws = m.get('draws', 0)
         wr = m.get('winrate', 0) * 100
         p_abs = m.get('profit_total_abs', 0)
+        p_pct = m.get('profit_total', 0) * 100
         dd = m.get('max_drawdown_account', 0) * 100
         pf = m.get('profit_factor', 0)
         sortino = m.get('sortino', 0)
         sharpe = m.get('sharpe', 0)
 
-        print(f'  >>> CURRENT BEST TRIAL PERFORMANCE <<<')
-        print(f'  * Total Trades:   {trades} trades')
-        print(f'  * Win Rate:       {wr:.1f}% ({wins} Wins / {losses} Losses)')
-        print(f'  * Absolute Gain:  +{p_abs:.2f} USDT (+{p_abs:.2f}%)')
+        print('  >>> CURRENT BEST TRIAL PERFORMANCE <<<')
+        print(f'  * Total Trades:   {trades} trades ({wins} Wins / {draws} Draws / {losses} Losses)')
+        print(f'  * Win Rate:       {wr:.1f}%')
+        print(f'  * Profit:         +{p_abs:.2f} USDT (+{p_pct:.2f}%)')
         print(f'  * Max Drawdown:   {dd:.2f}%')
         print(f'  * Profit Factor:  {pf:.2f}')
-        print(f'  * Sortino Ratio:  {sortino:.2f} | Sharpe: {sharpe:.2f}')
-        print('-' * 70)
+        print(f'  * Sharpe Ratio:   {sharpe:.3f} | Sortino: {sortino:.3f}')
+        print(f'  * Loss/Objective: {best_loss:.5f}')
+        print('-' * 75)
 
         p = best.get('params_dict', {})
-        p_det = best.get('params_details', {})
         print('  >>> KEY OPTIMIZED PARAMETERS <<<')
-        if 'leverage_num' in p:
-            print(f'  * Leverage:          {p.get(\"leverage_num\")}x')
-        if 'z_liq_threshold' in p:
-            print(f'  * Z-Liq Trigger:     {p.get(\"z_liq_threshold\")} sigma')
-        if 'long_tp_disp' in p:
-            print(f'  * Long Take Profit:  {p.get(\"long_tp_disp\")} ({p.get(\"long_tp_disp\")*100:.2f}%)')
-        if 'short_tp_disp' in p:
-            print(f'  * Short Take Profit: {p.get(\"short_tp_disp\")} ({p.get(\"short_tp_disp\")*100:.2f}%)')
-        if 'target_tp_disp' in p:
-            print(f'  * Outlier Target TP: {p.get(\"target_tp_disp\")} ({p.get(\"target_tp_disp\")*100:.2f}%)')
-        if 'stoploss' in p:
-            print(f'  * Stoploss:          {p.get(\"stoploss\", 0)*100:.2f}% on margin')
-        if 'long_max_holding_min' in p:
-            print(f'  * Max Holding Time:  {p.get(\"long_max_holding_min\")} min')
 
-    print('=' * 70)
+        # Buy space / Long params
+        buy_keys = [k for k in p if k.startswith('long_') or k in ('leverage_num', 'z_liq_reversal', 'z_liq_cascade', 'wick_ratio_threshold', 'trend_ema_period')]
+        sell_keys = [k for k in p if k.startswith('short_')]
+
+        if buy_keys:
+            print('  [Buy Space / Long Entries]')
+            if 'long_leverage_num' in p:
+                print(f'    - Long Leverage:     {p[\"long_leverage_num\"]}x')
+            elif 'leverage_num' in p:
+                print(f'    - Leverage:          {p[\"leverage_num\"]}x')
+            if 'long_trend_ema_period' in p:
+                print(f'    - Long Trend EMA:    {p[\"long_trend_ema_period\"]}')
+            elif 'trend_ema_period' in p:
+                print(f'    - Trend EMA:         {p[\"trend_ema_period\"]}')
+            if 'long_wick_ratio_threshold' in p:
+                print(f'    - Long Wick Ratio:   {p[\"long_wick_ratio_threshold\"]*100:.1f}%')
+            elif 'wick_ratio_threshold' in p:
+                print(f'    - Wick Ratio:        {p[\"wick_ratio_threshold\"]*100:.1f}%')
+            if 'long_z_liq_reversal' in p:
+                print(f'    - Long Reversal Z:   {p[\"long_z_liq_reversal\"]} σ')
+            elif 'z_liq_reversal' in p:
+                print(f'    - Reversal Z:        {p[\"z_liq_reversal\"]} σ')
+            if 'long_z_liq_cascade' in p:
+                print(f'    - Long Cascade Z:    {p[\"long_z_liq_cascade\"]} σ')
+            elif 'z_liq_cascade' in p:
+                print(f'    - Cascade Z:         {p[\"z_liq_cascade\"]} σ')
+
+        if sell_keys:
+            print('  [Sell Space / Short Entries]')
+            if 'short_leverage_num' in p:
+                print(f'    - Short Leverage:    {p[\"short_leverage_num\"]}x')
+            if 'short_trend_ema_period' in p:
+                print(f'    - Short Trend EMA:   {p[\"short_trend_ema_period\"]}')
+            if 'short_wick_ratio_threshold' in p:
+                print(f'    - Short Wick Ratio:  {p[\"short_wick_ratio_threshold\"]*100:.1f}%')
+            if 'short_z_liq_reversal' in p:
+                print(f'    - Short Reversal Z:  {p[\"short_z_liq_reversal\"]} σ')
+            if 'short_z_liq_cascade' in p:
+                print(f'    - Short Cascade Z:   {p[\"short_z_liq_cascade\"]} σ')
+
+        # Fallbacks for other generic strategies
+        for extra in ('stoploss', 'long_tp_disp', 'short_tp_disp', 'target_tp_disp', 'z_liq_threshold'):
+            if extra in p:
+                print(f'    - {extra}: {p[extra]}')
+
+    print('=' * 75)
     print('  (Updating live every 3s... Press Ctrl+C to exit monitor)')
     time.sleep(3)
 "

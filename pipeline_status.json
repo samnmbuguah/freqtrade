@@ -1,14 +1,14 @@
 {
-  "running": false,
+  "running": true,
   "current_index": 1,
-  "total_items": 1,
-  "strategy": "LiqCandleBreakoutStrategy",
+  "total_items": 3,
+  "strategy": "LiquidationFlipStrategy",
   "timeframe": "15m",
   "stage": 1,
-  "stage_name": "10k Epochs (All Spaces: buy sell roi stoploss trailing | OnlyProfit Loss)",
-  "spaces": "buy sell roi stoploss trailing",
+  "stage_name": "10,000 Epochs Asymmetric Buy/Sell Optimization",
+  "spaces": "buy sell",
+  "loss": "SharpeHyperOptLoss",
   "target_epochs": 10000,
-  "start_time": "2026-10-06 15:01:23 UTC",
-  "error": "Terminated by user",
+  "start_time": "2026-10-21 00:17:21 UTC",
   "completed_all": false
 }
