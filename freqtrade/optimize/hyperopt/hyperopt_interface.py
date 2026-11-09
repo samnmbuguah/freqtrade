@@ -150,11 +150,11 @@ class IHyperOpt(ABC):
         """
         Create a stoploss space.
 
-        Defines range of stoploss values to search.
+        Defines range of stoploss values to search. Capped at -4% (-0.040 to -0.005).
         You may override it in your custom Hyperopt class.
         """
         return [
-            SKDecimal(-0.35, -0.02, decimals=3, name="stoploss"),
+            SKDecimal(-0.040, -0.005, decimals=3, name="stoploss"),
         ]
 
     def generate_trailing_params(self, params: dict) -> dict:
